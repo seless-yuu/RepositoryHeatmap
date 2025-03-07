@@ -1,6 +1,7 @@
 package heatmap
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ type Visualizer struct {
 	outputDir  string
 	outputType string
 	stats      *models.RepositoryStats
+	repoPath   string // リポジトリのルートパス
 }
 
 // NewVisualizer は新しいVisualizerインスタンスを作成する
@@ -24,7 +26,13 @@ func NewVisualizer(outputDir, outputType string, stats *models.RepositoryStats) 
 		outputDir:  outputDir,
 		outputType: strings.ToLower(outputType),
 		stats:      stats,
+		repoPath:   "", // デフォルトは空文字
 	}
+}
+
+// SetRepoPath はリポジトリパスを設定する
+func (v *Visualizer) SetRepoPath(repoPath string) {
+	v.repoPath = repoPath
 }
 
 // Visualize はヒートマップデータを可視化する
@@ -209,6 +217,47 @@ func (v *Visualizer) generateFileHeatmaps() error {
 	return nil
 }
 
+// readFileContent はファイルの内容を読み込む
+func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
+	// リポジトリパスが設定されていない場合はエラー
+	if v.repoPath == "" {
+		return nil, fmt.Errorf("リポジトリパスが設定されていません")
+	}
+
+	// ファイルのフルパスを作成
+	fullPath := filepath.Join(v.repoPath, filePath)
+
+	// ファイルを開く
+	file, err := os.Open(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("ファイルを開けませんでした: %w", err)
+	}
+	defer file.Close()
+
+	// ファイル内容を読み込む
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("ファイル読み込み中にエラーが発生しました: %w", err)
+	}
+
+	return lines, nil
+}
+
+// escapeSpecialChars はSVG内で特殊文字をエスケープする
+func escapeSpecialChars(text string) string {
+	text = strings.ReplaceAll(text, "&", "&amp;")
+	text = strings.ReplaceAll(text, "<", "&lt;")
+	text = strings.ReplaceAll(text, ">", "&gt;")
+	text = strings.ReplaceAll(text, "\"", "&quot;")
+	text = strings.ReplaceAll(text, "'", "&apos;")
+	return text
+}
+
 // generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成する
 func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
 	// 必要に応じてディレクトリを作成
@@ -265,20 +314,36 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		return authors[i].Count > authors[j].Count
 	})
 
+	// ファイルの内容を読み込む（失敗しても続行）
+	fileContent, _ := v.readFileContent(filePath)
+
+	// 縦幅の調整（ファイル内容に応じて）
+	height := 600 // 基本高さ
+
+	// ファイル内容がある場合は高さを増やす
+	if len(fileContent) > 0 {
+		// 各行18pxとして計算（最大50行まで）
+		contentHeight := len(fileContent)
+		if contentHeight > 50 {
+			contentHeight = 50
+		}
+		height += contentHeight * 18
+	}
+
 	// SVGの基本構造を書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+<svg width="1000" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
   <text x="10" y="30" font-size="16" font-family="Arial">ファイル: %s</text>
   <text x="10" y="50" font-size="14" font-family="Arial">変更回数: %d / 最終変更: %s</text>
   
   <!-- ヒートマップバー -->
-  <rect x="10" y="70" width="780" height="30" fill="%s" />
-  <text x="400" y="90" text-anchor="middle" font-size="14" fill="white">変更頻度レベル: %.2f</text>
+  <rect x="10" y="70" width="980" height="30" fill="%s" />
+  <text x="500" y="90" text-anchor="middle" font-size="14" fill="white">変更頻度レベル: %.2f</text>
   
   <!-- 著者情報 -->
   <text x="10" y="120" font-size="14" font-family="Arial">主な貢献者:</text>`,
-		filePath, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
+		height, filePath, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
 		color, fileInfo.HeatLevel)
 
 	// 著者リストを表示（最大5人まで）
@@ -293,21 +358,93 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 			140+i*20, authors[i].Name, authors[i].Count)
 	}
 
-	// 行変更ヒートマップの描画（最大100行まで）
-	if len(lineChanges) > 0 {
+	// 最大変更回数を計算（色の濃淡用）
+	maxCount := 0
+	lineCountMap := make(map[int]int) // 行番号→変更回数のマップ
+
+	for _, lc := range lineChanges {
+		if lc.Count > maxCount {
+			maxCount = lc.Count
+		}
+		lineCountMap[lc.LineNum] = lc.Count
+	}
+
+	// ファイル内容の表示（ある場合）
+	if len(fileContent) > 0 {
 		fmt.Fprint(file, `
   
-  <!-- 行変更ヒートマップ -->
-  <text x="10" y="240" font-size="14" font-family="Arial">行変更ヒートマップ:</text>
+  <!-- ファイル内容 -->
+  <text x="10" y="200" font-size="14" font-family="Arial">ファイル内容:</text>
+  <rect x="10" y="210" width="980" height="30" fill="#ddd" />
+  <text x="20" y="230" font-size="12" font-family="monospace">行番号</text>
+  <text x="100" y="230" font-size="12" font-family="monospace">内容</text>
+  <text x="900" y="230" font-size="12" font-family="monospace">変更頻度</text>
+  
   <g transform="translate(10, 250)">`)
 
-		// 最大変更行数を計算
-		maxCount := 0
-		for _, lc := range lineChanges {
-			if lc.Count > maxCount {
-				maxCount = lc.Count
-			}
+		// 表示する行数を制限（最大50行まで）
+		lineLimit := 50
+		if len(fileContent) < lineLimit {
+			lineLimit = len(fileContent)
 		}
+
+		for i := 0; i < lineLimit; i++ {
+			lineNum := i + 1 // 1-indexed
+			lineHeatLevel := 0.0
+			lineCount := lineCountMap[lineNum]
+
+			if maxCount > 0 && lineCount > 0 {
+				lineHeatLevel = float64(lineCount) / float64(maxCount)
+			}
+
+			// 行の背景色を決定
+			bgColor := "#fff" // デフォルトは白
+			if lineHeatLevel > 0 {
+				bgColor = GetHeatColor(lineHeatLevel)
+			}
+
+			// 行の内容をエスケープ
+			lineContent := ""
+			if i < len(fileContent) {
+				lineContent = escapeSpecialChars(fileContent[i])
+				// 長すぎる行は省略
+				if len(lineContent) > 100 {
+					lineContent = lineContent[:97] + "..."
+				}
+			}
+
+			// 行を描画
+			fmt.Fprintf(file, `
+    <g>
+      <rect x="0" y="%d" width="980" height="18" fill="%s" opacity="0.7" />
+      <text x="20" y="%d" font-size="12" font-family="monospace">%d</text>
+      <text x="100" y="%d" font-size="12" font-family="monospace">%s</text>
+      <text x="900" y="%d" font-size="12" font-family="monospace">%d</text>
+    </g>`,
+				i*18, bgColor, i*18+14, lineNum, i*18+14, lineContent, i*18+14, lineCount)
+		}
+
+		fmt.Fprint(file, `
+  </g>`)
+	}
+
+	// 行変更ヒートマップの描画（最大100行まで）
+	yOffset := 280
+	if len(fileContent) > 0 {
+		// ファイル内容表示がある場合はオフセットを調整
+		contentHeight := len(fileContent)
+		if contentHeight > 50 {
+			contentHeight = 50
+		}
+		yOffset += contentHeight * 18
+	}
+
+	if len(lineChanges) > 0 {
+		fmt.Fprintf(file, `
+  
+  <!-- 行変更ヒートマップ -->
+  <text x="10" y="%d" font-size="14" font-family="Arial">行変更ヒートマップ:</text>
+  <g transform="translate(10, %d)">`, yOffset-40, yOffset)
 
 		// 表示する行数を制限
 		lineLimit := 100
@@ -319,12 +456,12 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 			lc := lineChanges[i]
 			lineHeatLevel := float64(lc.Count) / float64(maxCount)
 			lineColor := GetHeatColor(lineHeatLevel)
-			barWidth := 50 + int(lineHeatLevel*650) // 最小幅50、最大幅700
+			barWidth := 50 + int(lineHeatLevel*800) // 最小幅50、最大幅850
 
 			fmt.Fprintf(file, `
-    <rect x="0" y="%d" width="%d" height="4" fill="%s" />
+    <rect x="0" y="%d" width="%d" height="6" fill="%s" />
     <text x="%d" y="%d" font-size="10" font-family="monospace">行%d: %d回</text>`,
-				i*6, barWidth, lineColor, barWidth+5, i*6+3, lc.LineNum, lc.Count)
+				i*8, barWidth, lineColor, barWidth+5, i*8+6, lc.LineNum, lc.Count)
 		}
 
 		fmt.Fprint(file, `

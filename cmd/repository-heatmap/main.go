@@ -115,6 +115,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// リポジトリの絶対パスを取得
+	var absRepoPath string
+	var localRepoPath string
+
 	logDebug("リポジトリヒートマップ解析を開始します...")
 	logDebug("リポジトリ: %s", repoPath)
 	logDebug("出力ディレクトリ: %s", absOutputDir)
@@ -134,6 +138,13 @@ func main() {
 			logDebug("リポジトリを開けませんでした: %v", err)
 			os.Exit(1)
 		}
+		// ローカルリポジトリパスを設定
+		absRepoPath, err = filepath.Abs(repoPath)
+		if err != nil {
+			logDebug("リポジトリパスの解決に失敗しました: %v", err)
+			os.Exit(1)
+		}
+		localRepoPath = absRepoPath
 	} else if utils.IsValidGitURL(repoPath) {
 		// クローン用の一時ディレクトリを作成
 		tempDir := filepath.Join(outputDir, "repo-clone")
@@ -147,6 +158,13 @@ func main() {
 			logDebug("リポジトリのクローンに失敗しました: %v", err)
 			os.Exit(1)
 		}
+		// クローンされたリポジトリパスを設定
+		absRepoPath, err = filepath.Abs(tempDir)
+		if err != nil {
+			logDebug("クローンパスの解決に失敗しました: %v", err)
+			os.Exit(1)
+		}
+		localRepoPath = absRepoPath
 	} else {
 		logDebug("無効なリポジトリパスまたはURL: %s", repoPath)
 		os.Exit(1)
@@ -180,6 +198,8 @@ func main() {
 	// ヒートマップの可視化
 	logDebug("ヒートマップを可視化中...")
 	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, stats)
+	// リポジトリのパスを設定（ファイル内容の読み込みに必要）
+	visualizer.SetRepoPath(localRepoPath)
 	if err := visualizer.Visualize(); err != nil {
 		logDebug("ヒートマップの可視化に失敗しました: %v", err)
 		os.Exit(1)
