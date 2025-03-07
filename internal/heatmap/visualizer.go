@@ -318,7 +318,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	fileContent, _ := v.readFileContent(filePath)
 
 	// 縦幅の調整（ファイル内容に応じて）
-	height := 600 // 基本高さ
+	height := 400 // 基本高さ
 
 	// ファイル内容がある場合は高さを増やす
 	if len(fileContent) > 0 {
@@ -327,7 +327,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		if contentHeight > 50 {
 			contentHeight = 50
 		}
-		height += contentHeight * 18
+		height += contentHeight*18 + 60 // 説明用のヘッダーなどを考慮して+60px
 	}
 
 	// SVGの基本構造を書き込む
@@ -374,7 +374,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		fmt.Fprint(file, `
   
   <!-- ファイル内容 -->
-  <text x="10" y="200" font-size="14" font-family="Arial">ファイル内容:</text>
+  <text x="10" y="200" font-size="14" font-family="Arial">ファイル内容（色は変更頻度を表します）:</text>
   <rect x="10" y="210" width="980" height="30" fill="#ddd" />
   <text x="20" y="230" font-size="12" font-family="monospace">行番号</text>
   <text x="100" y="230" font-size="12" font-family="monospace">内容</text>
@@ -422,46 +422,6 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
       <text x="900" y="%d" font-size="12" font-family="monospace">%d</text>
     </g>`,
 				i*18, bgColor, i*18+14, lineNum, i*18+14, lineContent, i*18+14, lineCount)
-		}
-
-		fmt.Fprint(file, `
-  </g>`)
-	}
-
-	// 行変更ヒートマップの描画（最大100行まで）
-	yOffset := 280
-	if len(fileContent) > 0 {
-		// ファイル内容表示がある場合はオフセットを調整
-		contentHeight := len(fileContent)
-		if contentHeight > 50 {
-			contentHeight = 50
-		}
-		yOffset += contentHeight * 18
-	}
-
-	if len(lineChanges) > 0 {
-		fmt.Fprintf(file, `
-  
-  <!-- 行変更ヒートマップ -->
-  <text x="10" y="%d" font-size="14" font-family="Arial">行変更ヒートマップ:</text>
-  <g transform="translate(10, %d)">`, yOffset-40, yOffset)
-
-		// 表示する行数を制限
-		lineLimit := 100
-		if len(lineChanges) < lineLimit {
-			lineLimit = len(lineChanges)
-		}
-
-		for i := 0; i < lineLimit; i++ {
-			lc := lineChanges[i]
-			lineHeatLevel := float64(lc.Count) / float64(maxCount)
-			lineColor := GetHeatColor(lineHeatLevel)
-			barWidth := 50 + int(lineHeatLevel*800) // 最小幅50、最大幅850
-
-			fmt.Fprintf(file, `
-    <rect x="0" y="%d" width="%d" height="6" fill="%s" />
-    <text x="%d" y="%d" font-size="10" font-family="monospace">行%d: %d回</text>`,
-				i*8, barWidth, lineColor, barWidth+5, i*8+6, lc.LineNum, lc.Count)
 		}
 
 		fmt.Fprint(file, `
