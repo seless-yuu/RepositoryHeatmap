@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -35,28 +36,54 @@ func IsLocalRepository(repoPath string) bool {
 
 // SanitizePath はファイルパスを安全なファイル名形式に変換する
 func SanitizePath(path string) string {
-	// ディレクトリ部分と名前部分を取得
-	dir, filename := filepath.Split(path)
+	// 移動やコピーを示す特殊なパスを処理（例: 'old => new'）
+	if strings.Contains(path, "=>") {
+		parts := strings.Split(path, "=>")
+		if len(parts) > 1 {
+			// 最新のパスを使用（通常は右側）
+			path = strings.TrimSpace(parts[len(parts)-1])
+		}
+	}
 
-	// 必要に応じてディレクトリ部分を作成
-	if dir != "" {
-		// スラッシュをOSのセパレータに変換
+	// ディレクトリ部分と名前部分を取得
+	dir := filepath.Dir(path)
+	filename := filepath.Base(path)
+
+	// ディレクトリパスを安全な形式に変換
+	if dir != "" && dir != "." {
+		// 非アルファベット数字記号を安全な形式に変換
+		dir = regexp.MustCompile(`[^a-zA-Z0-9/\\]`).ReplaceAllString(dir, "_")
+
+		// WindowsとUnixのパス区切り文字を統一
 		dir = strings.ReplaceAll(dir, "/", string(os.PathSeparator))
 		dir = strings.ReplaceAll(dir, "\\", string(os.PathSeparator))
+	} else {
+		dir = "."
 	}
+
+	// ファイル名から拡張子を分離
+	ext := filepath.Ext(filename)
+	filenameWithoutExt := strings.TrimSuffix(filename, ext)
 
 	// ファイル名部分を安全な文字列に変換
 	// ファイルシステムで問題となる文字を置換
-	safeFilename := strings.ReplaceAll(filename, ":", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, "*", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, "?", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, "\"", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, "<", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, ">", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, "|", "_")
-	safeFilename = strings.ReplaceAll(safeFilename, ".", "_")
+	safeFilename := regexp.MustCompile(`[^a-zA-Z0-9-_]`).ReplaceAllString(filenameWithoutExt, "_")
+
+	// 拡張子も安全な形式に変換
+	safeExt := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(ext, "_")
+
+	// 安全なファイル名を生成
+	safeFilename = safeFilename + safeExt
+
+	// 空のファイル名は避ける
+	if safeFilename == "" {
+		safeFilename = "unknown_file"
+	}
 
 	// 新しいパスを作成
+	if dir == "." {
+		return safeFilename
+	}
 	return filepath.Join(dir, safeFilename)
 }
 

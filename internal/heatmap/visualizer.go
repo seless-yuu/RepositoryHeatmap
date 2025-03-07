@@ -111,18 +111,10 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 	// 各ファイルのヒートマップを生成
 	for filePath, fileInfo := range v.stats.Files {
-		// ファイル名を安全な形式に変換
+		// ファイル名のハッシュを生成して一意のファイル名にする
 		safeFileName := utils.SanitizePath(filePath)
 
-		// ファイルを保存するディレクトリパスを作成
-		dirPath := filepath.Join(fileHeatmapDir, filepath.Dir(safeFileName))
-
-		// ディレクトリが存在することを確認
-		if err := utils.EnsureDirectoryExists(dirPath); err != nil {
-			return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", dirPath, err)
-		}
-
-		// 出力ファイルパスを作成
+		// 出力ファイルパスを作成 - フラットな構造を使用
 		outputPath := filepath.Join(fileHeatmapDir, safeFileName+"."+v.outputType)
 
 		// ファイルの変更頻度に基づく色を取得
@@ -147,6 +139,11 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 // generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成する
 func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
+	// 必要に応じてディレクトリを作成
+	if err := utils.EnsureDirectoryExists(filepath.Dir(outputPath)); err != nil {
+		return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", filepath.Dir(outputPath), err)
+	}
+
 	// ファイルを作成
 	file, err := os.Create(outputPath)
 	if err != nil {
@@ -169,6 +166,11 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 
 // generateWebPFileHeatmap はWebP形式のファイルヒートマップを生成する
 func (v *Visualizer) generateWebPFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
+	// 必要に応じてディレクトリを作成
+	if err := utils.EnsureDirectoryExists(filepath.Dir(outputPath)); err != nil {
+		return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", filepath.Dir(outputPath), err)
+	}
+
 	// TODO: 実際のWebP生成処理の実装
 	// Go言語でWebP形式を生成するには、別のライブラリが必要になる可能性があります
 
