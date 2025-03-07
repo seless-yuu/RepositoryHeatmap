@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/repositoryheatmap/internal/utils"
 	"github.com/repositoryheatmap/pkg/models"
 )
 
@@ -104,16 +105,25 @@ func (v *Visualizer) generateWebPRepositoryHeatmap(outputPath string) error {
 func (v *Visualizer) generateFileHeatmaps() error {
 	// ファイルヒートマップの出力ディレクトリを作成
 	fileHeatmapDir := filepath.Join(v.outputDir, "file-heatmaps")
-	if err := os.MkdirAll(fileHeatmapDir, 0755); err != nil {
+	if err := utils.EnsureDirectoryExists(fileHeatmapDir); err != nil {
 		return fmt.Errorf("ファイルヒートマップディレクトリの作成に失敗しました: %w", err)
 	}
 
 	// 各ファイルのヒートマップを生成
 	for filePath, fileInfo := range v.stats.Files {
 		// ファイル名を安全な形式に変換
-		safeFileName := strings.ReplaceAll(filePath, string(os.PathSeparator), "_")
-		safeFileName = strings.ReplaceAll(safeFileName, ".", "_")
-		outputPath := filepath.Join(fileHeatmapDir, fmt.Sprintf("%s.%s", safeFileName, v.outputType))
+		safeFileName := utils.SanitizePath(filePath)
+
+		// ファイルを保存するディレクトリパスを作成
+		dirPath := filepath.Join(fileHeatmapDir, filepath.Dir(safeFileName))
+
+		// ディレクトリが存在することを確認
+		if err := utils.EnsureDirectoryExists(dirPath); err != nil {
+			return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", dirPath, err)
+		}
+
+		// 出力ファイルパスを作成
+		outputPath := filepath.Join(fileHeatmapDir, safeFileName+"."+v.outputType)
 
 		// ファイルの変更頻度に基づく色を取得
 		color := GetHeatColor(fileInfo.HeatLevel)

@@ -33,19 +33,31 @@ func IsLocalRepository(repoPath string) bool {
 	return info.IsDir()
 }
 
-// SanitizePath はファイルパスを安全な形式に変換する
+// SanitizePath はファイルパスを安全なファイル名形式に変換する
 func SanitizePath(path string) string {
+	// ディレクトリ部分と名前部分を取得
+	dir, filename := filepath.Split(path)
+
+	// 必要に応じてディレクトリ部分を作成
+	if dir != "" {
+		// スラッシュをOSのセパレータに変換
+		dir = strings.ReplaceAll(dir, "/", string(os.PathSeparator))
+		dir = strings.ReplaceAll(dir, "\\", string(os.PathSeparator))
+	}
+
+	// ファイル名部分を安全な文字列に変換
 	// ファイルシステムで問題となる文字を置換
-	sanitized := strings.ReplaceAll(path, ":", "_")
-	sanitized = strings.ReplaceAll(sanitized, "/", "_")
-	sanitized = strings.ReplaceAll(sanitized, "\\", "_")
-	sanitized = strings.ReplaceAll(sanitized, "*", "_")
-	sanitized = strings.ReplaceAll(sanitized, "?", "_")
-	sanitized = strings.ReplaceAll(sanitized, "\"", "_")
-	sanitized = strings.ReplaceAll(sanitized, "<", "_")
-	sanitized = strings.ReplaceAll(sanitized, ">", "_")
-	sanitized = strings.ReplaceAll(sanitized, "|", "_")
-	return sanitized
+	safeFilename := strings.ReplaceAll(filename, ":", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, "*", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, "?", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, "\"", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, "<", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, ">", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, "|", "_")
+	safeFilename = strings.ReplaceAll(safeFilename, ".", "_")
+
+	// 新しいパスを作成
+	return filepath.Join(dir, safeFilename)
 }
 
 // GetFileExtension はファイルの拡張子を取得する
