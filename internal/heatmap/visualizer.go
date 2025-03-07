@@ -81,23 +81,33 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	// ヒートマップの作成に必要なファイルデータを準備
 	files := getSortedFilesByHeat(v.stats)
 
-	// 描画パラメータ
+	// 描画パラメータ - ファイル数に応じて調整
 	const (
-		canvasWidth  = 1200
-		canvasHeight = 800
-		marginTop    = 80
-		marginLeft   = 50
-		marginRight  = 50
-		marginBottom = 50
-		maxBarWidth  = canvasWidth - marginLeft - marginRight
-		barHeight    = 20
-		barGap       = 5
+		marginTop        = 80
+		marginLeft       = 50
+		marginRight      = 50
+		marginBottom     = 50
+		barHeight        = 20
+		barGap           = 5
+		maxBarWidth      = 1100               // 最大バー幅は固定
+		fileHeaderHeight = 100                // ヘッダー部分の高さ
+		fileEntryHeight  = barHeight + barGap // 1ファイルあたりの高さ
 	)
 
-	// 表示するファイル数を制限（最大で25ファイル）
-	maxFiles := 25
+	// 表示するファイル数を決定（最大で100ファイルまで）
+	maxFiles := 100
 	if len(files) > maxFiles {
 		files = files[:maxFiles]
+	}
+
+	// キャンバスのサイズをファイル数に応じて調整
+	canvasWidth := 1200
+	// ファイル数 × (バーの高さ + 間隔) + ヘッダーと余白
+	canvasHeight := len(files)*fileEntryHeight + fileHeaderHeight + marginTop + marginBottom
+
+	// 最小高さを確保
+	if canvasHeight < 800 {
+		canvasHeight = 800
 	}
 
 	// SVGヘッダーを書き込む
@@ -106,6 +116,7 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
   <text x="%d" y="40" font-size="24" font-family="Arial">%s リポジトリヒートマップ</text>
   <text x="%d" y="70" font-size="14" font-family="Arial">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
+  <text x="%d" y="90" font-size="12" font-family="Arial">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
   
   <!-- 凡例 -->
   <g transform="translate(%d, 30)">
@@ -119,13 +130,14 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
     <text x="305" y="0" font-size="10" font-family="Arial">高</text>
   </g>
 
-  <!-- ヒートマップ -->
+  <!-- スクロール可能なヒートマップ -->
   <g transform="translate(%d, %d)">
 `,
 		canvasWidth, canvasHeight,
 		canvasWidth/2, v.stats.RepositoryName,
 		canvasWidth/2, v.stats.CommitCount, v.stats.FileCount,
 		v.stats.FirstCommitAt.Format("2006/01/02"), v.stats.LastCommitAt.Format("2006/01/02"),
+		canvasWidth/2, len(files), v.stats.FileCount,
 		marginLeft, marginLeft, marginTop)
 
 	// 各ファイルのヒートマップバーを描画
