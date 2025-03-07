@@ -66,15 +66,12 @@ func main() {
 	}
 
 	// リポジトリのオープンまたはクローン
-	var isLocalRepo bool
 	if utils.IsLocalRepository(repoPath) {
-		isLocalRepo = true
 		fmt.Printf("ローカルリポジトリを開きます: %s\n", repoPath)
 		if err := analyzer.Open(); err != nil {
 			log.Fatalf("リポジトリを開けませんでした: %v", err)
 		}
 	} else if utils.IsValidGitURL(repoPath) {
-		isLocalRepo = false
 		// クローン用の一時ディレクトリを作成
 		tempDir := filepath.Join(outputDir, "repo-clone")
 		if err := utils.EnsureDirectoryExists(tempDir); err != nil {
