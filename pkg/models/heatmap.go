@@ -9,6 +9,7 @@ type FileChangeInfo struct {
 	LastModified   time.Time      `json:"last_modified"`   // 最終変更日時
 	Authors        map[string]int `json:"authors"`         // 著者別の変更回数
 	LineChanges    map[int]int    `json:"line_changes"`    // 行番号ごとの変更回数
+	LineContents   map[int]string `json:"line_contents"`   // 行番号ごとのテキスト内容
 	CommitMessages []string       `json:"commit_messages"` // 関連するコミットメッセージ
 	FileType       string         `json:"file_type"`       // ファイルタイプ（拡張子など）
 	HeatLevel      float64        `json:"heat_level"`      // 相対的な変更頻度レベル (0.0-1.0)

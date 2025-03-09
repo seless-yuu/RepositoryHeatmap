@@ -584,11 +584,38 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	}
 	defer file.Close()
 
-	// ファイルの内容を読み込む
-	fileContent, err := v.readFileContent(filePath)
-	// エラーの場合は空の内容で続行
-	if err != nil {
-		fileContent = []string{"ファイルの内容を読み込めませんでした。"}
+	// ファイル内容の取得
+	var fileContent []string
+
+	// JSONに行内容が保存されている場合はそれを使用
+	if len(fileInfo.LineContents) > 0 {
+		// 最大の行番号を取得
+		maxLine := 0
+		for lineNum := range fileInfo.LineContents {
+			if lineNum > maxLine {
+				maxLine = lineNum
+			}
+		}
+
+		// LineContentsから行内容を取得
+		fileContent = make([]string, maxLine)
+		for i := range fileContent {
+			lineNum := i + 1
+			if content, exists := fileInfo.LineContents[lineNum]; exists {
+				fileContent[i] = content
+			}
+		}
+
+		fmt.Printf("JSONから '%s' の内容を読み込みました (%d行)\n", filePath, maxLine)
+	} else {
+		// JSONに行内容がない場合は、リポジトリからファイル内容を読み込む（後方互換性）
+		var readErr error
+		fileContent, readErr = v.readFileContent(filePath)
+		if readErr != nil {
+			// エラーの場合は空の内容で続行
+			fileContent = []string{"ファイルの内容を読み込めませんでした。"}
+			fmt.Printf("警告: '%s' の内容を読み込めませんでした: %v\n", filePath, readErr)
+		}
 	}
 
 	// 描画パラメータ

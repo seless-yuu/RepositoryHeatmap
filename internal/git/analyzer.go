@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -240,10 +241,35 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 					LastModified:   c.Author.When,
 					Authors:        make(map[string]int),
 					LineChanges:    make(map[int]int),
+					LineContents:   make(map[int]string),
 					CommitMessages: []string{},
 					FileType:       filepath.Ext(filePath),
 				}
 				a.stats.FileCount++
+
+				// 最新コミットの場合、ファイルの内容を読み込んで保存
+				if c == commits[0] {
+					// ファイルオブジェクトを取得
+					fileObj, err := c.File(filePath)
+					if err == nil {
+						// バイナリファイルは処理しない
+						isBinary, err := fileObj.IsBinary()
+						if err == nil && !isBinary {
+							// ファイル内容を読み込む
+							content, err := fileObj.Contents()
+							if err == nil {
+								lines := strings.Split(content, "\n")
+								for i, line := range lines {
+									lineNumber := i + 1
+									fileInfo.LineContents[lineNumber] = line
+								}
+							}
+						} else if isBinary {
+							// バイナリファイルはスキップ
+							fmt.Printf("バイナリファイル '%s' はスキップします\n", filePath)
+						}
+					}
+				}
 			}
 
 			// 変更回数をカウント
