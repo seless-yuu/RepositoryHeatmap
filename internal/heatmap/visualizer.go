@@ -16,8 +16,8 @@ type Visualizer struct {
 	outputDir      string
 	outputType     string
 	stats          *models.RepositoryStats
-	repoPath       string // リポジトリのルートパス
-	maxFilesToShow int    // 表示する最大ファイル数
+	maxFilesToShow int
+	inputJSONPath  string
 }
 
 // TreeNode はツリーマップのノードを表す構造体
@@ -40,19 +40,19 @@ type Rectangle struct {
 }
 
 // NewVisualizer は新しいVisualizerインスタンスを作成する
-func NewVisualizer(outputDir, outputType string, stats *models.RepositoryStats) *Visualizer {
+func NewVisualizer(outputDir, outputType string, stats *models.RepositoryStats, maxFilesToShow int, inputJSONPath string) *Visualizer {
 	return &Visualizer{
 		outputDir:      outputDir,
-		outputType:     strings.ToLower(outputType),
+		outputType:     outputType,
 		stats:          stats,
-		repoPath:       "",  // デフォルトは空文字
-		maxFilesToShow: 100, // デフォルトは100ファイル
+		maxFilesToShow: maxFilesToShow,
+		inputJSONPath:  inputJSONPath,
 	}
 }
 
 // SetRepoPath はリポジトリパスを設定する
 func (v *Visualizer) SetRepoPath(repoPath string) {
-	v.repoPath = repoPath
+	// この関数は後方互換性のために残していますが、実際には何もしません
 }
 
 // SetMaxFilesToShow は表示する最大ファイル数を設定する
@@ -93,17 +93,17 @@ func (v *Visualizer) Visualize() error {
 
 // GetHeatColor は熱レベルに応じた色を返す
 func GetHeatColor(heatLevel float64) string {
-	// 色のグラデーションを定義（青から赤へ）
+	// 目に優しい色のグラデーション（青から赤へ）
 	if heatLevel < 0.2 {
-		return "#0000FF" // 低（青）
+		return "#E3F2FD" // 非常に薄い青（低）
 	} else if heatLevel < 0.4 {
-		return "#0066FF" // やや低（水色）
+		return "#90CAF9" // 薄い青（やや低）
 	} else if heatLevel < 0.6 {
-		return "#00FF00" // 中（緑）
+		return "#42A5F5" // 中程度の青（中）
 	} else if heatLevel < 0.8 {
-		return "#FFCC00" // やや高（黄色）
+		return "#1E88E5" // やや濃い青（やや高）
 	} else {
-		return "#FF0000" // 高（赤）
+		return "#1565C0" // 濃い青（高）
 	}
 }
 
@@ -402,8 +402,8 @@ func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
 		}
 
 		fmt.Fprintf(file, `
-  <text x="%.1f" y="%.1f" font-size="12" font-family="Arial" fill="#000000" pointer-events="none">%s</text>`,
-			rect.X+4, rect.Y+15, displayName)
+  <text x="%.1f" y="%.1f" font-size="14" font-family="Arial" fill="#000000" pointer-events="none">%s</text>`,
+			rect.X+4, rect.Y+16, displayName)
 	}
 
 	// ファイルノードの場合は、リンクタグを閉じる
@@ -452,9 +452,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 		// 親ディレクトリが存在することを確認
 		parentDir := filepath.Dir(outputPath)
 		if err := utils.EnsureDirectoryExists(parentDir); err != nil {
-			// エラーをログに記録するだけで、処理を続行する
-			fmt.Printf("警告: ディレクトリの作成に失敗しました: %s - %v\n", parentDir, err)
-			continue
+			return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", parentDir, err)
 		}
 
 		// ファイルの変更頻度に基づく色を取得
@@ -469,10 +467,9 @@ func (v *Visualizer) generateFileHeatmaps() error {
 			err = v.generateWebPFileHeatmap(outputPath, filePath, fileInfo, color)
 		}
 
-		// エラーが発生した場合は警告を表示して続行
+		// エラーが発生した場合は処理を中断
 		if err != nil {
-			fmt.Printf("警告: ファイル '%s' のヒートマップ生成をスキップします: %v\n", filePath, err)
-			continue
+			return fmt.Errorf("ファイル '%s' のヒートマップ生成に失敗しました: %w", filePath, err)
 		}
 	}
 
@@ -482,33 +479,41 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 // readFileContent はファイルの内容を読み込む
 func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
-	// リポジトリパスが設定されていない場合はエラー
-	if v.repoPath == "" {
-		return nil, fmt.Errorf("リポジトリパスが設定されていません。--repo オプションでリポジトリのパスを指定してください")
+	// 1. 入力JSONファイルの場所を基準にして解決を試みる
+	jsonDir := filepath.Dir(v.inputJSONPath)
+	fullPath := filepath.Join(jsonDir, filePath)
+	if _, err := os.Stat(fullPath); err == nil {
+		return v.readFile(fullPath)
 	}
 
-	// ファイルのフルパスを作成
-	fullPath := filepath.Join(v.repoPath, filePath)
+	// 2. 出力ディレクトリの親を基準にして解決を試みる
+	fullPath = filepath.Join(filepath.Dir(v.outputDir), filePath)
+	if _, err := os.Stat(fullPath); err == nil {
+		return v.readFile(fullPath)
+	}
 
-	// ファイルを開く
+	return nil, fmt.Errorf("ファイルが見つかりません: %s\n"+
+		"以下のパスを試行しました:\n"+
+		"- %s\n"+
+		"- %s",
+		filePath,
+		filepath.Join(jsonDir, filePath),
+		filepath.Join(filepath.Dir(v.outputDir), filePath))
+}
+
+func (v *Visualizer) readFile(fullPath string) ([]string, error) {
 	file, err := os.Open(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("ファイルを開けませんでした: %w", err)
+		return nil, err
 	}
 	defer file.Close()
 
-	// ファイル内容を読み込む
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("ファイル読み込み中にエラーが発生しました: %w", err)
-	}
-
-	return lines, nil
+	return lines, scanner.Err()
 }
 
 // escapeSpecialChars はSVG内で特殊文字をエスケープする
@@ -534,7 +539,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	fileContent, err := v.readFileContent(filePath)
 	// エラーの場合は空の内容で続行
 	if err != nil {
-		fileContent = []string{fmt.Sprintf("ファイルの内容を読み込めませんでした: %v", err)}
+		fileContent = []string{"ファイルの内容を読み込めませんでした。"}
 	}
 
 	// 描画パラメータ
