@@ -21,6 +21,25 @@ type Visualizer struct {
 	maxFilesToShow int    // 表示する最大ファイル数
 }
 
+// TreeNode はツリーマップのノードを表す構造体
+type TreeNode struct {
+	Name      string
+	Path      string
+	Size      float64 // ファイルの変更回数（ヒートレベル）
+	HeatLevel float64 // 0.0-1.0の範囲のヒートレベル
+	Children  []*TreeNode
+	IsDir     bool
+	Rect      Rectangle // 描画用の矩形領域
+}
+
+// Rectangle はツリーマップの矩形領域を表す構造体
+type Rectangle struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+}
+
 // NewVisualizer は新しいVisualizerインスタンスを作成する
 func NewVisualizer(outputDir, outputType string, stats *models.RepositoryStats) *Visualizer {
 	return &Visualizer{
@@ -88,48 +107,40 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	}
 	defer file.Close()
 
-	// ヒートマップの作成に必要なファイルデータを準備
-	files := getSortedFilesByHeat(v.stats)
+	// ツリーマップのルートノードを作成
+	root := v.buildFileTree()
 
-	// 描画パラメータ - ファイル数に応じて調整
+	// 描画パラメータ
 	const (
-		marginTop        = 80
-		marginLeft       = 50
-		marginRight      = 50
-		marginBottom     = 50
-		barHeight        = 20
-		barGap           = 5
-		maxBarWidth      = 1100               // 最大バー幅は固定
-		fileHeaderHeight = 100                // ヘッダー部分の高さ
-		fileEntryHeight  = barHeight + barGap // 1ファイルあたりの高さ
+		canvasWidth   = 1200
+		canvasHeight  = 900
+		marginTop     = 100
+		marginLeft    = 50
+		marginRight   = 50
+		marginBottom  = 50
+		treeMapWidth  = canvasWidth - marginLeft - marginRight
+		treeMapHeight = canvasHeight - marginTop - marginBottom
 	)
 
-	// 表示するファイル数を決定（設定された最大ファイル数まで）
-	maxFiles := v.maxFilesToShow
-	if len(files) > maxFiles {
-		files = files[:maxFiles]
+	// ツリーマップレイアウトを計算
+	rootRect := Rectangle{
+		X:      float64(marginLeft),
+		Y:      float64(marginTop),
+		Width:  float64(treeMapWidth),
+		Height: float64(treeMapHeight),
 	}
-
-	// キャンバスのサイズをファイル数に応じて調整
-	canvasWidth := 1200
-	// ファイル数 × (バーの高さ + 間隔) + ヘッダーと余白
-	canvasHeight := len(files)*fileEntryHeight + fileHeaderHeight + marginTop + marginBottom
-
-	// 最小高さを確保
-	if canvasHeight < 800 {
-		canvasHeight = 800
-	}
+	v.layoutTreeMap(root, rootRect)
 
 	// SVGヘッダーを書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
-  <text x="%d" y="40" font-size="24" font-family="Arial">%s リポジトリヒートマップ</text>
-  <text x="%d" y="70" font-size="14" font-family="Arial">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
-  <text x="%d" y="90" font-size="12" font-family="Arial">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
+  <text x="%d" y="40" font-size="24" font-family="Arial" text-anchor="middle">%s リポジトリヒートマップ</text>
+  <text x="%d" y="70" font-size="14" font-family="Arial" text-anchor="middle">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
+  <text x="%d" y="90" font-size="12" font-family="Arial" text-anchor="middle">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
   
   <!-- 凡例 -->
-  <g transform="translate(%d, 30)">
+  <g transform="translate(50, 30)">
     <text x="0" y="0" font-size="12" font-family="Arial">変更頻度:</text>
     <rect x="80" y="-10" width="20" height="12" fill="#0000FF" />
     <text x="105" y="0" font-size="10" font-family="Arial">低</text>
@@ -139,52 +150,230 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
     <rect x="280" y="-10" width="20" height="12" fill="#FF0000" />
     <text x="305" y="0" font-size="10" font-family="Arial">高</text>
   </g>
-
-  <!-- スクロール可能なヒートマップ -->
-  <g transform="translate(%d, %d)">
 `,
 		canvasWidth, canvasHeight,
 		canvasWidth/2, v.stats.RepositoryName,
 		canvasWidth/2, v.stats.CommitCount, v.stats.FileCount,
 		v.stats.FirstCommitAt.Format("2006/01/02"), v.stats.LastCommitAt.Format("2006/01/02"),
-		canvasWidth/2, len(files), v.stats.FileCount,
-		marginLeft, marginLeft, marginTop)
+		canvasWidth/2, len(getSortedFilesByHeat(v.stats)[:v.maxFilesToShow]), len(v.stats.Files))
 
-	// 各ファイルのヒートマップバーを描画
-	for i, fileInfo := range files {
-		y := i * (barHeight + barGap)
-		barWidth := int(fileInfo.HeatLevel * float64(maxBarWidth))
-		if barWidth < 10 {
-			barWidth = 10 // 最小幅を設定
-		}
-
-		// 色を取得
-		color := GetHeatColor(fileInfo.HeatLevel)
-
-		// パスを短縮（長すぎる場合）
-		displayPath := fileInfo.FilePath
-		if len(displayPath) > 50 {
-			displayPath = "..." + displayPath[len(displayPath)-47:]
-		}
-
-		// バーを描画
-		fmt.Fprintf(file, `    <!-- %s -->
-    <text x="-10" y="%d" text-anchor="end" font-size="12" font-family="monospace">%d</text>
-    <rect x="0" y="%d" width="%d" height="%d" fill="%s" />
-    <text x="%d" y="%d" font-size="12" font-family="monospace">%s (%d)</text>
-`,
-			fileInfo.FilePath,
-			y+barHeight/2+4, fileInfo.ChangeCount,
-			y, barWidth, barHeight, color,
-			barWidth+5, y+barHeight/2+4, displayPath, fileInfo.ChangeCount)
-	}
+	// ツリーマップを描画
+	v.renderTreeMap(file, root)
 
 	// SVGフッターを書き込む
-	fmt.Fprintf(file, `  </g>
-</svg>`)
+	fmt.Fprintf(file, `</svg>`)
 
 	fmt.Printf("リポジトリヒートマップをSVGに保存しました: %s\n", outputPath)
 	return nil
+}
+
+// buildFileTree はファイル情報からツリー構造を構築する
+func (v *Visualizer) buildFileTree() *TreeNode {
+	root := &TreeNode{
+		Name:     "root",
+		Path:     "",
+		IsDir:    true,
+		Children: []*TreeNode{},
+	}
+
+	// ファイルのソートと制限
+	files := getSortedFilesByHeat(v.stats)
+	maxFiles := v.maxFilesToShow
+	if len(files) > maxFiles {
+		files = files[:maxFiles]
+	}
+
+	// 各ファイルをツリーに追加
+	for _, fileInfo := range files {
+		path := fileInfo.FilePath
+		pathParts := strings.Split(path, "/")
+
+		// パスがバックスラッシュで区切られている場合（Windows）
+		if len(pathParts) == 1 {
+			pathParts = strings.Split(path, "\\")
+		}
+
+		currentNode := root
+
+		// ディレクトリ階層を構築
+		for i := 0; i < len(pathParts)-1; i++ {
+			dirName := pathParts[i]
+			if dirName == "" {
+				continue
+			}
+
+			// 既存のディレクトリノードを検索
+			found := false
+			for _, child := range currentNode.Children {
+				if child.Name == dirName && child.IsDir {
+					currentNode = child
+					found = true
+					break
+				}
+			}
+
+			// 見つからなければ新しいディレクトリノードを作成
+			if !found {
+				dirNode := &TreeNode{
+					Name:     dirName,
+					Path:     strings.Join(pathParts[:i+1], "/"),
+					IsDir:    true,
+					Children: []*TreeNode{},
+				}
+				currentNode.Children = append(currentNode.Children, dirNode)
+				currentNode = dirNode
+			}
+		}
+
+		// ファイルノードを追加
+		fileName := pathParts[len(pathParts)-1]
+		fileNode := &TreeNode{
+			Name:      fileName,
+			Path:      fileInfo.FilePath,
+			Size:      float64(fileInfo.ChangeCount),
+			HeatLevel: fileInfo.HeatLevel,
+			IsDir:     false,
+			Children:  []*TreeNode{},
+		}
+		currentNode.Children = append(currentNode.Children, fileNode)
+	}
+
+	// ディレクトリサイズを計算（子ノードの合計）
+	calculateDirSize(root)
+
+	return root
+}
+
+// calculateDirSize はディレクトリノードのサイズを計算する（再帰的に）
+func calculateDirSize(node *TreeNode) float64 {
+	if !node.IsDir {
+		return node.Size
+	}
+
+	var total float64
+	for _, child := range node.Children {
+		total += calculateDirSize(child)
+	}
+
+	node.Size = total
+	node.HeatLevel = 0 // ディレクトリのヒートレベルは子ノードの平均値を使用することも可能
+	return total
+}
+
+// layoutTreeMap はツリーマップのレイアウトを計算する
+func (v *Visualizer) layoutTreeMap(node *TreeNode, rect Rectangle) {
+	node.Rect = rect
+
+	if !node.IsDir || len(node.Children) == 0 {
+		return
+	}
+
+	// 子ノードの合計サイズを計算
+	var totalSize float64
+	for _, child := range node.Children {
+		totalSize += child.Size
+	}
+
+	// サイズが0の場合は処理しない
+	if totalSize <= 0 {
+		return
+	}
+
+	// スクエアリファインド（Squarified）アルゴリズムの簡易版
+	// 横長の矩形なら縦に分割、縦長の矩形なら横に分割
+	isHorizontal := rect.Width > rect.Height
+
+	// 現在の位置
+	x := rect.X
+	y := rect.Y
+
+	// 残りの幅と高さ
+	remainingWidth := rect.Width
+	remainingHeight := rect.Height
+
+	for _, child := range node.Children {
+		// 子ノードが占める割合
+		ratio := child.Size / totalSize
+
+		// 子ノードの矩形を計算
+		var childRect Rectangle
+		if isHorizontal {
+			// 横方向に分割
+			childRect = Rectangle{
+				X:      x,
+				Y:      y,
+				Width:  remainingWidth * ratio,
+				Height: rect.Height,
+			}
+			x += childRect.Width
+		} else {
+			// 縦方向に分割
+			childRect = Rectangle{
+				X:      x,
+				Y:      y,
+				Width:  rect.Width,
+				Height: remainingHeight * ratio,
+			}
+			y += childRect.Height
+		}
+
+		// 再帰的にレイアウト
+		v.layoutTreeMap(child, childRect)
+	}
+}
+
+// renderTreeMap はツリーマップをSVGに描画する
+func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
+	// ルートノードは描画しない
+	if node.Name == "root" {
+		// 子ノードを描画
+		for _, child := range node.Children {
+			v.renderTreeMap(file, child)
+		}
+		return
+	}
+
+	// ノードの矩形を描画
+	rect := node.Rect
+
+	// 最小サイズの確認（あまりに小さい矩形は描画しない）
+	if rect.Width < 2 || rect.Height < 2 {
+		return
+	}
+
+	// 色を決定
+	var color string
+	if node.IsDir {
+		// ディレクトリは薄いグレー
+		color = "#e0e0e0"
+	} else {
+		// ファイルはヒートレベルに応じた色
+		color = GetHeatColor(node.HeatLevel)
+	}
+
+	// 矩形を描画
+	fmt.Fprintf(file, `  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" stroke="#ffffff" stroke-width="1">
+    <title>%s (変更回数: %d)</title>
+  </rect>`,
+		rect.X, rect.Y, rect.Width, rect.Height, color, node.Path, int(node.Size))
+
+	// テキストを表示（十分な大きさの場合のみ）
+	if rect.Width > 40 && rect.Height > 14 {
+		// 表示名を短縮
+		displayName := node.Name
+		if len(displayName) > 20 {
+			displayName = displayName[:17] + "..."
+		}
+
+		fmt.Fprintf(file, `
+  <text x="%.1f" y="%.1f" font-size="12" font-family="Arial" fill="#000000" pointer-events="none">%s</text>`,
+			rect.X+4, rect.Y+15, displayName)
+	}
+
+	// 子ノードを再帰的に描画
+	for _, child := range node.Children {
+		v.renderTreeMap(file, child)
+	}
 }
 
 // generateWebPRepositoryHeatmap はWebP形式のリポジトリヒートマップを生成する
