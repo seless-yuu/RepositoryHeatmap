@@ -1,59 +1,59 @@
 @echo off
-echo Repository Heatmap ãƒ“ãƒ«ãƒ‰ã‚¹ã‚¯ãƒªãƒ—ãƒˆ
+echo Repository Heatmap ƒrƒ‹ƒhƒXƒNƒŠƒvƒg
 echo ==============================
 
-echo Windows AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰ä¸­...
+echo Windows AMD64Œü‚¯ƒrƒ‹ƒh’†...
 set GOOS=windows
 set GOARCH=amd64
 go build -o repository-heatmap-windows-amd64.exe ./cmd/repository-heatmap/main.go
 if %ERRORLEVEL% neq 0 (
-    echo Windows AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+    echo Windows AMD64Œü‚¯ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½B
     exit /b %ERRORLEVEL%
 )
-echo Windows AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰å®Œäº†: repository-heatmap-windows-amd64.exe
+echo Windows AMD64Œü‚¯ƒrƒ‹ƒhŠ®—¹: repository-heatmap-windows-amd64.exe
 
-echo Windows ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ä¸­...
+echo Windows ARM64Œü‚¯ƒrƒ‹ƒh’†...
 set GOOS=windows
 set GOARCH=arm64
 go build -o repository-heatmap-windows-arm64.exe ./cmd/repository-heatmap/main.go
 if %ERRORLEVEL% neq 0 (
-    echo Windows ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+    echo Windows ARM64Œü‚¯ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½B
     exit /b %ERRORLEVEL%
 )
-echo Windows ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰å®Œäº†: repository-heatmap-windows-arm64.exe
+echo Windows ARM64Œü‚¯ƒrƒ‹ƒhŠ®—¹: repository-heatmap-windows-arm64.exe
 
-echo Linux AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰ä¸­...
+echo Linux AMD64Œü‚¯ƒrƒ‹ƒh’†...
 set GOOS=linux
 set GOARCH=amd64
 go build -o repository-heatmap-linux-amd64 ./cmd/repository-heatmap/main.go
 if %ERRORLEVEL% neq 0 (
-    echo Linux AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+    echo Linux AMD64Œü‚¯ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½B
     exit /b %ERRORLEVEL%
 )
-echo Linux AMD64å‘ã‘ãƒ“ãƒ«ãƒ‰å®Œäº†: repository-heatmap-linux-amd64
+echo Linux AMD64Œü‚¯ƒrƒ‹ƒhŠ®—¹: repository-heatmap-linux-amd64
 
-echo Linux ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ä¸­...
+echo Linux ARM64Œü‚¯ƒrƒ‹ƒh’†...
 set GOOS=linux
 set GOARCH=arm64
 go build -o repository-heatmap-linux-arm64 ./cmd/repository-heatmap/main.go
 if %ERRORLEVEL% neq 0 (
-    echo Linux ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+    echo Linux ARM64Œü‚¯ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½B
     exit /b %ERRORLEVEL%
 )
-echo Linux ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰å®Œäº†: repository-heatmap-linux-arm64
+echo Linux ARM64Œü‚¯ƒrƒ‹ƒhŠ®—¹: repository-heatmap-linux-arm64
 
-echo macOS ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ä¸­...
+echo macOS ARM64Œü‚¯ƒrƒ‹ƒh’†...
 set GOOS=darwin
 set GOARCH=arm64
 go build -o repository-heatmap-darwin-arm64 ./cmd/repository-heatmap/main.go
 if %ERRORLEVEL% neq 0 (
-    echo macOS ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+    echo macOS ARM64Œü‚¯ƒrƒ‹ƒh‚É¸”s‚µ‚Ü‚µ‚½B
     exit /b %ERRORLEVEL%
 )
-echo macOS ARM64å‘ã‘ãƒ“ãƒ«ãƒ‰å®Œäº†: repository-heatmap-darwin-arm64
+echo macOS ARM64Œü‚¯ƒrƒ‹ƒhŠ®—¹: repository-heatmap-darwin-arm64
 
-echo ã™ã¹ã¦ã®ãƒ“ãƒ«ãƒ‰ãŒå®Œäº†ã—ã¾ã—ãŸã€‚
-echo ç”Ÿæˆã•ã‚ŒãŸãƒã‚¤ãƒŠãƒª:
+echo ‚·‚×‚Ä‚Ìƒrƒ‹ƒh‚ªŠ®—¹‚µ‚Ü‚µ‚½B
+echo ¶¬‚³‚ê‚½ƒoƒCƒiƒŠ:
 echo - repository-heatmap-windows-amd64.exe
 echo - repository-heatmap-windows-arm64.exe
 echo - repository-heatmap-linux-amd64
