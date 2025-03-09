@@ -96,20 +96,3 @@ func getSortedFilesByHeat(stats *models.RepositoryStats) []models.FileChangeInfo
 
 	return files
 }
-
-// GetHeatColor は変更頻度に基づいて色を返す (0.0-1.0)
-func GetHeatColor(heatLevel float64) string {
-	// ヒートレベルに応じた色を返す
-	// 0.0 (低) = 青系, 0.5 = 緑系, 1.0 (高) = 赤系
-	if heatLevel < 0.2 {
-		return "#0000FF" // 青
-	} else if heatLevel < 0.4 {
-		return "#0066FF" // 青緑
-	} else if heatLevel < 0.6 {
-		return "#00FF00" // 緑
-	} else if heatLevel < 0.8 {
-		return "#FFCC00" // 黄色
-	} else {
-		return "#FF0000" // 赤
-	}
-}

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/repositoryheatmap/internal/git"
@@ -27,9 +28,14 @@ var (
 	sinceDate   string
 	workers     int
 	maxFiles    int
+	webMode     bool
+	webPort     int
 	version     = "0.1.0" // アプリケーションバージョン
 	logFile     *os.File
 	logger      *log.Logger
+	inputFile   string
+	filePattern string
+	fileType    string
 )
 
 // コマンドラインフラグの設定
@@ -42,21 +48,25 @@ func setupCommonFlags() {
 
 // analyzeコマンド用のフラグ設定
 func setupAnalyzeFlags(analyzeCmd *flag.FlagSet) {
-	analyzeCmd.StringVar(&repoPath, "repo", "", "解析するGitリポジトリのパスまたはURL（必須）")
-	analyzeCmd.StringVar(&outputDir, "output", "output", "出力ディレクトリ")
+	analyzeCmd.StringVar(&repoPath, "repo", "", "解析するGitリポジトリのパスまたはURL")
+	analyzeCmd.StringVar(&outputDir, "output", "output", "解析結果の出力ディレクトリ")
 	analyzeCmd.BoolVar(&skipClone, "skip-clone", false, "リポジトリが既にクローンされている場合はスキップ")
-	analyzeCmd.StringVar(&sinceDate, "since", "", "指定された日付以降のコミットのみを解析 (YYYY-MM-DD形式)")
-	analyzeCmd.IntVar(&workers, "workers", 1, "並列処理に使用するワーカー数（0=CPUコア数に自動設定）")
+	analyzeCmd.StringVar(&sinceDate, "since", "", "指定日付以降のコミットのみを解析 (YYYY-MM-DD形式)")
+	analyzeCmd.IntVar(&workers, "workers", 0, "並列ワーカー数（0: 自動、CPU数に基づく）")
+	analyzeCmd.BoolVar(&showHelp, "help", false, "ヘルプを表示")
 	analyzeCmd.BoolVar(&debugLog, "debug", false, "デバッグログをファイルに出力")
+	analyzeCmd.StringVar(&filePattern, "file-pattern", "", "解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）")
+	analyzeCmd.StringVar(&fileType, "file-type", "", "解析対象のファイル種別（拡張子のみ、例: 'go'）")
 }
 
 // visualizeコマンド用のフラグ設定
 func setupVisualizeFlags(visualizeCmd *flag.FlagSet) {
-	visualizeCmd.StringVar(&outputDir, "output", "output", "JSONデータとヒートマップ画像の出力ディレクトリ")
+	visualizeCmd.StringVar(&outputDir, "output", "output", "ヒートマップ出力ディレクトリ")
 	visualizeCmd.StringVar(&outputType, "format", "svg", "出力形式 (svg または webp)")
 	visualizeCmd.StringVar(&repoPath, "repo", "", "ファイル内容表示のためのリポジトリパス（必須ではない）")
 	visualizeCmd.IntVar(&maxFiles, "max-files", 100, "ヒートマップに表示する最大ファイル数")
 	visualizeCmd.BoolVar(&debugLog, "debug", false, "デバッグログをファイルに出力")
+	visualizeCmd.StringVar(&inputFile, "input", "", "入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）")
 }
 
 // analyzeコマンドのヘルプメッセージ
@@ -64,14 +74,18 @@ func showAnalyzeHelp(analyzeCmd *flag.FlagSet) {
 	fmt.Println("Repository Heatmap - リポジトリ解析コマンド")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s analyze [options]\n\n", os.Args[0])
-	fmt.Println("GitリポジトリのコミットデータとJSON出力を生成します。\n")
+	fmt.Println("Gitリポジトリを解析し、ヒートマップデータを生成します。")
+	fmt.Println()
 	fmt.Println("Options:")
 	analyzeCmd.PrintDefaults()
-	fmt.Println("\n例:")
-	fmt.Printf("  %s analyze --repo=/path/to/local/repo\n", os.Args[0])
+	fmt.Println()
+	fmt.Println("例:")
+	fmt.Printf("  %s analyze --repo=./myrepo --output=./results\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=https://github.com/username/repo.git\n", os.Args[0])
-	fmt.Printf("  %s analyze --repo=/path/to/repo --output=./results --workers=4\n", os.Args[0])
-	fmt.Printf("  %s analyze --repo=/path/to/repo --since=2023-02-01\n", os.Args[0])
+	fmt.Printf("  %s analyze --repo=./myrepo --since=2023-01-01\n", os.Args[0])
+	fmt.Printf("  %s analyze --repo=./myrepo --workers=4\n", os.Args[0])
+	fmt.Printf("  %s analyze --repo=./myrepo --file-pattern=\"*.go\" --output=./results\n", os.Args[0])
+	fmt.Printf("  %s analyze --repo=./myrepo --file-type=js --output=./results\n", os.Args[0])
 }
 
 // visualizeコマンドのヘルプメッセージ
@@ -79,14 +93,21 @@ func showVisualizeHelp(visualizeCmd *flag.FlagSet) {
 	fmt.Println("Repository Heatmap - ヒートマップ可視化コマンド")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s visualize [options]\n\n", os.Args[0])
-	fmt.Println("解析済みJSON出力からヒートマップを生成します。\n")
+	fmt.Println("リポジトリ解析データからヒートマップを生成します。")
+	fmt.Println()
 	fmt.Println("Options:")
 	visualizeCmd.PrintDefaults()
-	fmt.Println("\n例:")
-	fmt.Printf("  %s visualize --output=./results\n", os.Args[0])
-	fmt.Printf("  %s visualize --output=./results --format=webp\n", os.Args[0])
+	fmt.Println()
+	fmt.Println("出力形式:")
+	fmt.Println("  svg  - SVG形式のベクターグラフィックス（リポジトリ全体と個別ファイルのヒートマップを生成）")
+	fmt.Println("  webp - WebP形式の画像（実験的機能）")
+	fmt.Println()
+	fmt.Println("例:")
+	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --output=./results\n", os.Args[0])
+	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --format=svg\n", os.Args[0])
+	fmt.Printf("  %s visualize --output=./results --format=svg\n", os.Args[0])
 	fmt.Printf("  %s visualize --output=./results --repo=/path/to/repo\n", os.Args[0])
-	fmt.Printf("  %s visualize --output=./results --max-files=200\n", os.Args[0])
+	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --max-files=200\n", os.Args[0])
 }
 
 // 全体のヘルプメッセージ
@@ -200,6 +221,17 @@ func analyzeCommand(args []string) {
 		analyzer.SetSinceDate(*since)
 	}
 
+	// ファイルフィルタを設定
+	if filePattern != "" {
+		logDebug("ファイルパターンでフィルタリング: %s", filePattern)
+		analyzer.SetFilePattern(filePattern)
+	}
+
+	if fileType != "" {
+		logDebug("ファイル種別でフィルタリング: %s", fileType)
+		analyzer.SetFileType(fileType)
+	}
+
 	// リポジトリのオープンまたはクローン
 	if utils.IsLocalRepository(repoPath) {
 		logDebug("ローカルリポジトリを開きます: %s", repoPath)
@@ -309,29 +341,77 @@ func visualizeCommand(args []string) {
 		os.Exit(1)
 	}
 
-	// 出力ディレクトリにJSONファイルがあるか検索
-	files, err := ioutil.ReadDir(absOutputDir)
-	if err != nil {
-		logDebug("出力ディレクトリの読み取りに失敗しました: %v", err)
-		os.Exit(1)
-	}
-
-	// 最新のJSONファイルを探す
+	// JSONファイルの選択ロジック
 	var jsonFilePath string
-	var latestTime time.Time
 
-	for _, file := range files {
-		if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-			// JSONファイルの中で最新のものを選択
-			if file.ModTime().After(latestTime) {
-				latestTime = file.ModTime()
-				jsonFilePath = filepath.Join(absOutputDir, file.Name())
+	// 1. 入力ファイルが直接指定されている場合
+	if inputFile != "" {
+		absInputFile, err := filepath.Abs(inputFile)
+		if err != nil {
+			logDebug("入力ファイルパスの解決に失敗しました: %v", err)
+			os.Exit(1)
+		}
+
+		// ファイルの存在確認
+		if _, err := os.Stat(absInputFile); err != nil {
+			logDebug("指定された入力ファイルが見つかりません: %s", absInputFile)
+			os.Exit(1)
+		}
+
+		jsonFilePath = absInputFile
+		logDebug("指定された入力JSONファイルを使用します: %s", jsonFilePath)
+	} else {
+		// 2. リポジトリパスから推測
+		if repoPath != "" {
+			// リポジトリパスからリポジトリ名を取得
+			repoName := filepath.Base(repoPath)
+			// .git拡張子がある場合は削除
+			if filepath.Ext(repoName) == ".git" {
+				repoName = repoName[:len(repoName)-4]
+			}
+			logDebug("リポジトリ名: %s", repoName)
+
+			// リポジトリ名に対応するJSONファイルを探す
+			expectedJSONFile := repoName + "-heatmap.json"
+			expectedPath := filepath.Join(absOutputDir, expectedJSONFile)
+
+			if _, err := os.Stat(expectedPath); err == nil {
+				jsonFilePath = expectedPath
+				logDebug("リポジトリ名に対応するJSONファイルを使用します: %s", jsonFilePath)
+			} else {
+				logDebug("警告: リポジトリ名に対応するJSONファイルが見つかりません: %s", expectedPath)
+				// 見つからなかった場合は後続の処理で最新のJSONファイルを使用
+			}
+		}
+
+		// 3. 最新のJSONファイルを自動選択
+		if jsonFilePath == "" {
+			var latestTime time.Time
+			// 出力ディレクトリにJSONファイルがあるか検索
+			files, err := ioutil.ReadDir(absOutputDir)
+			if err != nil {
+				logDebug("出力ディレクトリの読み取りに失敗しました: %v", err)
+				os.Exit(1)
+			}
+
+			for _, file := range files {
+				if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
+					// JSONファイルの中で最新のものを選択
+					if file.ModTime().After(latestTime) {
+						latestTime = file.ModTime()
+						jsonFilePath = filepath.Join(absOutputDir, file.Name())
+					}
+				}
+			}
+
+			if jsonFilePath != "" {
+				logDebug("最新のJSONファイルを使用します: %s", jsonFilePath)
 			}
 		}
 	}
 
 	if jsonFilePath == "" {
-		logDebug("エラー: 出力ディレクトリにJSONファイルが見つかりませんでした")
+		logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
 		os.Exit(1)
 	}
 
@@ -350,6 +430,19 @@ func visualizeCommand(args []string) {
 		os.Exit(1)
 	}
 
+	// 特定のディレクトリ（.github, testdata）を除外するフィルタリング処理
+	filteredFiles := make(map[string]models.FileChangeInfo)
+	originalFileCount := len(stats.Files)
+	for path, fileInfo := range stats.Files {
+		// .githubディレクトリは除外する（標準的な設定ファイルのため）
+		if !strings.HasPrefix(path, ".github/") {
+			filteredFiles[path] = fileInfo
+		}
+	}
+	// フィルタリングされたファイルリストで置き換え
+	stats.Files = filteredFiles
+	logDebug("ファイル数: %d (フィルタリング前) -> %d (フィルタリング後)", originalFileCount, len(filteredFiles))
+
 	// リポジトリパスが指定されていれば、その情報を使用
 	var localRepoPath string
 	if repoPath != "" {
@@ -367,6 +460,8 @@ func visualizeCommand(args []string) {
 
 	logDebug("ヒートマップを可視化中...")
 	logDebug("出力ディレクトリ: %s", absOutputDir)
+
+	// 通常の静的可視化
 	logDebug("出力形式: %s", outputType)
 
 	// ヒートマップの可視化

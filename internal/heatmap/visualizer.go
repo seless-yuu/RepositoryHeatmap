@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/repositoryheatmap/internal/utils"
-	"github.com/repositoryheatmap/internal/web_visualizer"
 	"github.com/repositoryheatmap/pkg/models"
 )
 
@@ -64,87 +63,48 @@ func (v *Visualizer) SetMaxFilesToShow(maxFiles int) {
 	v.maxFilesToShow = maxFiles
 }
 
-// Visualize はヒートマップデータを可視化する
+// Visualize はヒートマップを生成する
 func (v *Visualizer) Visualize() error {
-	// 出力タイプのチェック
-	if v.outputType != "svg" && v.outputType != "webp" && v.outputType != "html" {
-		return fmt.Errorf("サポートされていない出力形式です: %s (svg, html または webp を使用してください)", v.outputType)
-	}
-
-	// 出力ディレクトリが存在しない場合は作成
-	if err := os.MkdirAll(v.outputDir, 0755); err != nil {
+	// 出力ディレクトリが存在するか確認
+	if err := utils.EnsureDirectoryExists(v.outputDir); err != nil {
 		return fmt.Errorf("出力ディレクトリの作成に失敗しました: %w", err)
 	}
 
-	// 出力形式に応じて処理を分岐
-	switch v.outputType {
-	case "svg":
+	// ヒートマップの種類に応じて生成処理を分岐
+	if v.outputType == "svg" || v.outputType == "webp" {
 		// リポジトリ全体のヒートマップを生成
 		if err := v.generateRepositoryHeatmap(); err != nil {
 			return fmt.Errorf("リポジトリヒートマップの生成に失敗しました: %w", err)
 		}
 
-		// 出力ファイルパスを作成
-		repoOutputPath := filepath.Join(v.outputDir, fmt.Sprintf("%s-repository-heatmap.%s", v.stats.RepositoryName, v.outputType))
-		fmt.Printf("リポジトリヒートマップをSVGに保存しました: %s\n", repoOutputPath)
-
-		// 個別ファイルのヒートマップを生成
+		// 個別のファイルヒートマップを生成
 		if err := v.generateFileHeatmaps(); err != nil {
 			return fmt.Errorf("ファイルヒートマップの生成に失敗しました: %w", err)
 		}
-		fmt.Printf("ファイルヒートマップを保存しました: %s\n", filepath.Join(v.outputDir, "file-heatmaps"))
-
-	case "webp":
-		// WebP形式の出力（将来の拡張用）
-		return fmt.Errorf("WebP形式の出力はまだ実装されていません")
-
-	case "html":
-		// HTML形式の出力
-		htmlOutputPath := filepath.Join(v.outputDir, fmt.Sprintf("%s-heatmap.html", v.stats.RepositoryName))
-		if err := v.GenerateHTMLHeatmap(htmlOutputPath); err != nil {
-			return fmt.Errorf("HTMLヒートマップの生成に失敗しました: %w", err)
-		}
-		fmt.Printf("リポジトリヒートマップをHTMLに保存しました: %s\n", htmlOutputPath)
+	} else {
+		return fmt.Errorf("未サポートの出力形式です: %s", v.outputType)
 	}
+
+	fmt.Printf("可視化が完了しました\n")
+	fmt.Printf("結果は %s ディレクトリに保存されました\n", v.outputDir)
 
 	return nil
 }
 
-// GenerateHTMLHeatmap はHTML形式のヒートマップを生成します
-func (v *Visualizer) GenerateHTMLHeatmap(outputPath string) error {
-	// HTMLテンプレートを読み込む
-	htmlTemplate, err := web_visualizer.GetHTMLTemplate()
-	if err != nil {
-		return fmt.Errorf("HTMLテンプレートの読み込みに失敗しました: %w", err)
+// GetHeatColor は熱レベルに応じた色を返す
+func GetHeatColor(heatLevel float64) string {
+	// 色のグラデーションを定義（青から赤へ）
+	if heatLevel < 0.2 {
+		return "#0000FF" // 低（青）
+	} else if heatLevel < 0.4 {
+		return "#0066FF" // やや低（水色）
+	} else if heatLevel < 0.6 {
+		return "#00FF00" // 中（緑）
+	} else if heatLevel < 0.8 {
+		return "#FFCC00" // やや高（黄色）
+	} else {
+		return "#FF0000" // 高（赤）
 	}
-
-	// HTMLファイルを作成
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("HTMLファイルの作成に失敗しました: %w", err)
-	}
-	defer file.Close()
-
-	// テンプレートを実行
-	data := struct {
-		RepoName    string
-		MaxFiles    int
-		JSONData    *models.RepositoryStats
-		FirstCommit string
-		LastCommit  string
-	}{
-		RepoName:    v.stats.RepositoryName,
-		MaxFiles:    v.maxFilesToShow,
-		JSONData:    v.stats,
-		FirstCommit: v.stats.FirstCommitAt.Format("2006/01/02"),
-		LastCommit:  v.stats.LastCommitAt.Format("2006/01/02"),
-	}
-
-	if err := htmlTemplate.Execute(file, data); err != nil {
-		return fmt.Errorf("HTMLテンプレートの実行に失敗しました: %w", err)
-	}
-
-	return nil
 }
 
 // generateRepositoryHeatmap はリポジトリ全体のヒートマップを生成する
@@ -483,25 +443,36 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 	// 各ファイルのヒートマップを生成
 	for filePath, fileInfo := range v.stats.Files {
-		// ファイル名のハッシュを生成して一意のファイル名にする
+		// ファイルパスを安全な形式に変換
 		safeFileName := utils.SanitizePath(filePath)
 
-		// 出力ファイルパスを作成 - フラットな構造を使用
+		// 出力ファイルパスを作成
 		outputPath := filepath.Join(fileHeatmapDir, safeFileName+"."+v.outputType)
+
+		// 親ディレクトリが存在することを確認
+		parentDir := filepath.Dir(outputPath)
+		if err := utils.EnsureDirectoryExists(parentDir); err != nil {
+			// エラーをログに記録するだけで、処理を続行する
+			fmt.Printf("警告: ディレクトリの作成に失敗しました: %s - %v\n", parentDir, err)
+			continue
+		}
 
 		// ファイルの変更頻度に基づく色を取得
 		color := GetHeatColor(fileInfo.HeatLevel)
 
 		// SVG形式の場合
+		var err error
 		if v.outputType == "svg" {
-			if err := v.generateSVGFileHeatmap(outputPath, filePath, fileInfo, color); err != nil {
-				return fmt.Errorf("ファイル '%s' のSVGヒートマップ生成に失敗しました: %w", filePath, err)
-			}
+			err = v.generateSVGFileHeatmap(outputPath, filePath, fileInfo, color)
 		} else {
 			// WebP形式の場合
-			if err := v.generateWebPFileHeatmap(outputPath, filePath, fileInfo, color); err != nil {
-				return fmt.Errorf("ファイル '%s' のWebPヒートマップ生成に失敗しました: %w", filePath, err)
-			}
+			err = v.generateWebPFileHeatmap(outputPath, filePath, fileInfo, color)
+		}
+
+		// エラーが発生した場合は警告を表示して続行
+		if err != nil {
+			fmt.Printf("警告: ファイル '%s' のヒートマップ生成をスキップします: %v\n", filePath, err)
+			continue
 		}
 	}
 
