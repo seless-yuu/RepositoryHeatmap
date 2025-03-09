@@ -56,8 +56,8 @@ func SanitizePath(path string) string {
 		dir = regexp.MustCompile(`[^a-zA-Z0-9/\\]`).ReplaceAllString(dir, "_")
 
 		// WindowsとUnixのパス区切り文字を統一
-		dir = strings.ReplaceAll(dir, "/", string(os.PathSeparator))
-		dir = strings.ReplaceAll(dir, "\\", string(os.PathSeparator))
+		// SVGファイルの参照のために、常に '/' を使用する
+		dir = strings.ReplaceAll(dir, "\\", "/")
 	} else {
 		dir = "."
 	}
@@ -85,7 +85,8 @@ func SanitizePath(path string) string {
 	if dir == "." {
 		return safeFilename
 	}
-	return filepath.Join(dir, safeFilename)
+	// パス区切り文字として常に '/' を使用
+	return dir + "/" + safeFilename
 }
 
 // GetFileExtension はファイルの拡張子を取得する
