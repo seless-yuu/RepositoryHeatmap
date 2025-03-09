@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/repositoryheatmap/internal/utils"
+	"github.com/repositoryheatmap/internal/web_visualizer"
 	"github.com/repositoryheatmap/pkg/models"
 )
 
@@ -67,18 +67,81 @@ func (v *Visualizer) SetMaxFilesToShow(maxFiles int) {
 // Visualize はヒートマップデータを可視化する
 func (v *Visualizer) Visualize() error {
 	// 出力タイプのチェック
-	if v.outputType != "svg" && v.outputType != "webp" {
-		return fmt.Errorf("サポートされていない出力形式です: %s (svg または webp を使用してください)", v.outputType)
+	if v.outputType != "svg" && v.outputType != "webp" && v.outputType != "html" {
+		return fmt.Errorf("サポートされていない出力形式です: %s (svg, html または webp を使用してください)", v.outputType)
 	}
 
-	// リポジトリ全体のヒートマップを生成
-	if err := v.generateRepositoryHeatmap(); err != nil {
-		return fmt.Errorf("リポジトリヒートマップの生成に失敗しました: %w", err)
+	// 出力ディレクトリが存在しない場合は作成
+	if err := os.MkdirAll(v.outputDir, 0755); err != nil {
+		return fmt.Errorf("出力ディレクトリの作成に失敗しました: %w", err)
 	}
 
-	// ファイル単位のヒートマップを生成
-	if err := v.generateFileHeatmaps(); err != nil {
-		return fmt.Errorf("ファイルヒートマップの生成に失敗しました: %w", err)
+	// 出力形式に応じて処理を分岐
+	switch v.outputType {
+	case "svg":
+		// リポジトリ全体のヒートマップを生成
+		if err := v.generateRepositoryHeatmap(); err != nil {
+			return fmt.Errorf("リポジトリヒートマップの生成に失敗しました: %w", err)
+		}
+
+		// 出力ファイルパスを作成
+		repoOutputPath := filepath.Join(v.outputDir, fmt.Sprintf("%s-repository-heatmap.%s", v.stats.RepositoryName, v.outputType))
+		fmt.Printf("リポジトリヒートマップをSVGに保存しました: %s\n", repoOutputPath)
+
+		// 個別ファイルのヒートマップを生成
+		if err := v.generateFileHeatmaps(); err != nil {
+			return fmt.Errorf("ファイルヒートマップの生成に失敗しました: %w", err)
+		}
+		fmt.Printf("ファイルヒートマップを保存しました: %s\n", filepath.Join(v.outputDir, "file-heatmaps"))
+
+	case "webp":
+		// WebP形式の出力（将来の拡張用）
+		return fmt.Errorf("WebP形式の出力はまだ実装されていません")
+
+	case "html":
+		// HTML形式の出力
+		htmlOutputPath := filepath.Join(v.outputDir, fmt.Sprintf("%s-heatmap.html", v.stats.RepositoryName))
+		if err := v.GenerateHTMLHeatmap(htmlOutputPath); err != nil {
+			return fmt.Errorf("HTMLヒートマップの生成に失敗しました: %w", err)
+		}
+		fmt.Printf("リポジトリヒートマップをHTMLに保存しました: %s\n", htmlOutputPath)
+	}
+
+	return nil
+}
+
+// GenerateHTMLHeatmap はHTML形式のヒートマップを生成します
+func (v *Visualizer) GenerateHTMLHeatmap(outputPath string) error {
+	// HTMLテンプレートを読み込む
+	htmlTemplate, err := web_visualizer.GetHTMLTemplate()
+	if err != nil {
+		return fmt.Errorf("HTMLテンプレートの読み込みに失敗しました: %w", err)
+	}
+
+	// HTMLファイルを作成
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("HTMLファイルの作成に失敗しました: %w", err)
+	}
+	defer file.Close()
+
+	// テンプレートを実行
+	data := struct {
+		RepoName    string
+		MaxFiles    int
+		JSONData    *models.RepositoryStats
+		FirstCommit string
+		LastCommit  string
+	}{
+		RepoName:    v.stats.RepositoryName,
+		MaxFiles:    v.maxFilesToShow,
+		JSONData:    v.stats,
+		FirstCommit: v.stats.FirstCommitAt.Format("2006/01/02"),
+		LastCommit:  v.stats.LastCommitAt.Format("2006/01/02"),
+	}
+
+	if err := htmlTemplate.Execute(file, data); err != nil {
+		return fmt.Errorf("HTMLテンプレートの実行に失敗しました: %w", err)
 	}
 
 	return nil
@@ -111,16 +174,18 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	root := v.buildFileTree()
 
 	// 描画パラメータ
-	const (
-		canvasWidth   = 1200
-		canvasHeight  = 900
-		marginTop     = 100
-		marginLeft    = 50
-		marginRight   = 50
-		marginBottom  = 50
-		treeMapWidth  = canvasWidth - marginLeft - marginRight
-		treeMapHeight = canvasHeight - marginTop - marginBottom
-	)
+	canvasWidth := 1200
+	canvasHeight := 900
+	if len(v.stats.Files) > 20 {
+		// ファイル数が多い場合は高さを調整
+		canvasHeight = 900 + (len(v.stats.Files)/20)*100
+	}
+	marginTop := 100
+	marginRight := 50
+	marginBottom := 50
+	marginLeft := 50
+	treeMapWidth := canvasWidth - marginLeft - marginRight
+	treeMapHeight := canvasHeight - marginTop - marginBottom
 
 	// ツリーマップレイアウトを計算
 	rootRect := Rectangle{
@@ -351,6 +416,17 @@ func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
 		color = GetHeatColor(node.HeatLevel)
 	}
 
+	// ファイルノードの場合は、リンクを追加
+	if !node.IsDir {
+		// ファイル名をサニタイズ
+		safeFileName := utils.SanitizePath(node.Path)
+		// リンク先のファイルパス（相対パス）
+		linkPath := fmt.Sprintf("file-heatmaps/%s.%s", safeFileName, v.outputType)
+
+		// リンクタグを開始
+		fmt.Fprintf(file, `  <a href="%s" target="_blank">`, linkPath)
+	}
+
 	// 矩形を描画
 	fmt.Fprintf(file, `  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" stroke="#ffffff" stroke-width="1">
     <title>%s (変更回数: %d)</title>
@@ -368,6 +444,11 @@ func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
 		fmt.Fprintf(file, `
   <text x="%.1f" y="%.1f" font-size="12" font-family="Arial" fill="#000000" pointer-events="none">%s</text>`,
 			rect.X+4, rect.Y+15, displayName)
+	}
+
+	// ファイルノードの場合は、リンクタグを閉じる
+	if !node.IsDir {
+		fmt.Fprintf(file, `  </a>`)
 	}
 
 	// 子ノードを再帰的に描画
@@ -471,11 +552,6 @@ func escapeSpecialChars(text string) string {
 
 // generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成する
 func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
-	// 必要に応じてディレクトリを作成
-	if err := utils.EnsureDirectoryExists(filepath.Dir(outputPath)); err != nil {
-		return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", filepath.Dir(outputPath), err)
-	}
-
 	// ファイルを作成
 	file, err := os.Create(outputPath)
 	if err != nil {
@@ -483,164 +559,92 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	}
 	defer file.Close()
 
-	// 行変更頻度データを取得
-	lineChanges := make([]struct {
-		LineNum int
-		Count   int
-	}, 0, len(fileInfo.LineChanges))
-
-	for lineNum, count := range fileInfo.LineChanges {
-		lineChanges = append(lineChanges, struct {
-			LineNum int
-			Count   int
-		}{
-			LineNum: lineNum,
-			Count:   count,
-		})
+	// ファイルの内容を読み込む
+	fileContent, err := v.readFileContent(filePath)
+	// エラーの場合は空の内容で続行
+	if err != nil {
+		fileContent = []string{"ファイルの内容を読み込めませんでした。"}
 	}
 
-	// 行番号でソート
-	sort.Slice(lineChanges, func(i, j int) bool {
-		return lineChanges[i].LineNum < lineChanges[j].LineNum
-	})
+	// 描画パラメータ
+	const (
+		lineHeight   = 20
+		marginTop    = 100
+		marginLeft   = 50
+		marginRight  = 50
+		marginBottom = 50
+		maxWidth     = 1200
+	)
 
-	// 著者情報を取得
-	authors := make([]struct {
-		Name  string
-		Count int
-	}, 0, len(fileInfo.Authors))
-
-	for name, count := range fileInfo.Authors {
-		authors = append(authors, struct {
-			Name  string
-			Count int
-		}{
-			Name:  name,
-			Count: count,
-		})
+	// コード行数に基づいてキャンバスの高さを決定
+	contentHeight := len(fileContent) * lineHeight
+	canvasHeight := contentHeight + marginTop + marginBottom
+	if canvasHeight < 400 {
+		canvasHeight = 400 // 最小高さ
 	}
 
-	// 貢献度でソート
-	sort.Slice(authors, func(i, j int) bool {
-		return authors[i].Count > authors[j].Count
-	})
-
-	// ファイルの内容を読み込む（失敗しても続行）
-	fileContent, _ := v.readFileContent(filePath)
-
-	// 縦幅の調整（ファイル内容に応じて）
-	height := 400 // 基本高さ
-
-	// ファイル内容がある場合は高さを増やす
-	if len(fileContent) > 0 {
-		// 各行18pxとして計算（最大50行まで）
-		contentHeight := len(fileContent)
-		if contentHeight > 50 {
-			contentHeight = 50
-		}
-		height += contentHeight*18 + 60 // 説明用のヘッダーなどを考慮して+60px
+	// ヒートマップに表示するタイトル（ファイルパス）
+	title := filePath
+	if len(title) > 80 {
+		title = "..." + title[len(title)-77:]
 	}
 
-	// SVGの基本構造を書き込む
+	// SVGヘッダーを書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="1000" height="%d" xmlns="http://www.w3.org/2000/svg">
+<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
-  <text x="10" y="30" font-size="16" font-family="Arial">ファイル: %s</text>
-  <text x="10" y="50" font-size="14" font-family="Arial">変更回数: %d / 最終変更: %s</text>
-  
-  <!-- ヒートマップバー -->
-  <rect x="10" y="70" width="980" height="30" fill="%s" />
-  <text x="500" y="90" text-anchor="middle" font-size="14" fill="white">変更頻度レベル: %.2f</text>
-  
-  <!-- 著者情報 -->
-  <text x="10" y="120" font-size="14" font-family="Arial">主な貢献者:</text>`,
-		height, filePath, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
-		color, fileInfo.HeatLevel)
+  <a href="../%s-repository-heatmap.%s" title="リポジトリ全体のヒートマップに戻る">
+    <text x="50" y="30" font-size="16" font-family="Arial" fill="#0066cc">← リポジトリ全体に戻る</text>
+  </a>
+  <text x="600" y="40" font-size="24" font-family="Arial" text-anchor="middle">ファイルヒートマップ</text>
+  <text x="600" y="70" font-size="14" font-family="Arial" text-anchor="middle">%s</text>
+  <text x="600" y="90" font-size="12" font-family="Arial" text-anchor="middle">変更回数: %d, 最終更新: %s</text>
 
-	// 著者リストを表示（最大5人まで）
-	authorLimit := 5
-	if len(authors) < authorLimit {
-		authorLimit = len(authors)
-	}
+  <!-- スクロール可能なコードビュー -->
+  <g transform="translate(%d, %d)">
+    <!-- 行番号とコード -->
+`,
+		maxWidth, canvasHeight,
+		v.stats.RepositoryName, v.outputType,
+		title, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
+		marginLeft, marginTop)
 
-	for i := 0; i < authorLimit; i++ {
-		fmt.Fprintf(file, `
-  <text x="20" y="%d" font-size="12" font-family="Arial">%s (%d)</text>`,
-			140+i*20, authors[i].Name, authors[i].Count)
-	}
+	// 各行のコードを描画
+	for i, line := range fileContent {
+		// 行番号を計算
+		lineNum := i + 1
 
-	// 最大変更回数を計算（色の濃淡用）
-	maxCount := 0
-	lineCountMap := make(map[int]int) // 行番号→変更回数のマップ
-
-	for _, lc := range lineChanges {
-		if lc.Count > maxCount {
-			maxCount = lc.Count
-		}
-		lineCountMap[lc.LineNum] = lc.Count
-	}
-
-	// ファイル内容の表示（ある場合）
-	if len(fileContent) > 0 {
-		fmt.Fprint(file, `
-  
-  <!-- ファイル内容 -->
-  <text x="10" y="200" font-size="14" font-family="Arial">ファイル内容（色は変更頻度を表します）:</text>
-  <rect x="10" y="210" width="980" height="30" fill="#ddd" />
-  <text x="20" y="230" font-size="12" font-family="monospace">行番号</text>
-  <text x="100" y="230" font-size="12" font-family="monospace">内容</text>
-  <text x="900" y="230" font-size="12" font-family="monospace">変更頻度</text>
-  
-  <g transform="translate(10, 250)">`)
-
-		// 表示する行数を制限（最大50行まで）
-		lineLimit := 50
-		if len(fileContent) < lineLimit {
-			lineLimit = len(fileContent)
+		// この行のヒートレベル（デフォルトは0）
+		heatLevel := 0
+		if level, exists := fileInfo.LineChanges[lineNum]; exists {
+			heatLevel = level
 		}
 
-		for i := 0; i < lineLimit; i++ {
-			lineNum := i + 1 // 1-indexed
-			lineHeatLevel := 0.0
-			lineCount := lineCountMap[lineNum]
-
-			if maxCount > 0 && lineCount > 0 {
-				lineHeatLevel = float64(lineCount) / float64(maxCount)
-			}
-
-			// 行の背景色を決定
-			bgColor := "#fff" // デフォルトは白
-			if lineHeatLevel > 0 {
-				bgColor = GetHeatColor(lineHeatLevel)
-			}
-
-			// 行の内容をエスケープ
-			lineContent := ""
-			if i < len(fileContent) {
-				lineContent = escapeSpecialChars(fileContent[i])
-				// 長すぎる行は省略
-				if len(lineContent) > 100 {
-					lineContent = lineContent[:97] + "..."
-				}
-			}
-
-			// 行を描画
-			fmt.Fprintf(file, `
-    <g>
-      <rect x="0" y="%d" width="980" height="18" fill="%s" opacity="0.7" />
-      <text x="20" y="%d" font-size="12" font-family="monospace">%d</text>
-      <text x="100" y="%d" font-size="12" font-family="monospace">%s</text>
-      <text x="900" y="%d" font-size="12" font-family="monospace">%d</text>
-    </g>`,
-				i*18, bgColor, i*18+14, lineNum, i*18+14, lineContent, i*18+14, lineCount)
+		// 色を取得
+		lineColor := "#ffffff" // デフォルトは白
+		if heatLevel > 0 {
+			// ヒートレベルを0.0-1.0の範囲に変換
+			normalizedHeat := float64(heatLevel) / 10.0
+			lineColor = GetHeatColor(normalizedHeat)
 		}
 
-		fmt.Fprint(file, `
-  </g>`)
+		// テキストをエスケープ
+		escapedText := escapeSpecialChars(line)
+
+		// 行を描画
+		fmt.Fprintf(file, `    <g>
+      <rect x="0" y="%d" width="%d" height="%d" fill="%s" />
+      <text x="-10" y="%d" text-anchor="end" font-size="12" font-family="monospace">%d</text>
+      <text x="5" y="%d" font-size="12" font-family="monospace">%s</text>
+    </g>
+`,
+			i*lineHeight, maxWidth-marginLeft-marginRight, lineHeight, lineColor,
+			i*lineHeight+14, lineNum,
+			i*lineHeight+14, escapedText)
 	}
 
-	// SVG終了タグ
-	fmt.Fprint(file, `
+	// SVGフッターを書き込む
+	fmt.Fprintf(file, `  </g>
 </svg>`)
 
 	return nil
