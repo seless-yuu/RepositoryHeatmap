@@ -45,6 +45,20 @@ GOOS=darwin GOARCH=arm64 go build -o repository-heatmap-darwin-arm64 ./cmd/repos
 GOOS=linux GOARCH=amd64 go build -o repository-heatmap-linux-amd64 ./cmd/repository-heatmap/main.go
 ```
 
+### ビルドスクリプト
+
+便宜上、リポジトリには複数のプラットフォーム向けにバイナリを自動的にコンパイルするビルドスクリプトが含まれています：
+
+- Windows環境：`build.bat`を実行してすべてのサポートプラットフォーム向けにビルドします。
+- macOS/Linux環境：`./build.sh`を実行してすべてのサポートプラットフォーム向けにビルドします（先に`chmod +x build.sh`でスクリプトに実行権限を付与してください）。
+
+これらのスクリプトは以下のプラットフォーム向けの実行ファイルを作成します：
+- Windows AMD64：`repository-heatmap-windows-amd64.exe`
+- Windows ARM64：`repository-heatmap-windows-arm64.exe`
+- Linux AMD64：`repository-heatmap-linux-amd64`
+- Linux ARM64：`repository-heatmap-linux-arm64`
+- macOS ARM64：`repository-heatmap-darwin-arm64`
+
 ## 使い方
 
 コマンドは2つのサブコマンドに分かれています：`analyze`（解析）と`visualize`（可視化）です。

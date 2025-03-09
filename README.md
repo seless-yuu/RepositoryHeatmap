@@ -54,6 +54,20 @@ GOOS=darwin GOARCH=arm64 go build -o repository-heatmap-darwin-arm64 ./cmd/repos
 GOOS=linux GOARCH=amd64 go build -o repository-heatmap-linux-amd64 ./cmd/repository-heatmap/main.go
 ```
 
+### Build Scripts
+
+For convenience, the repository includes build scripts that automatically compile binaries for multiple platforms:
+
+- On Windows: Run `build.bat` to build for all supported platforms.
+- On macOS/Linux: Run `./build.sh` to build for all supported platforms (make the script executable first with `chmod +x build.sh`).
+
+These scripts will create executables for the following platforms:
+- Windows AMD64: `repository-heatmap-windows-amd64.exe`
+- Windows ARM64: `repository-heatmap-windows-arm64.exe`
+- Linux AMD64: `repository-heatmap-linux-amd64`
+- Linux ARM64: `repository-heatmap-linux-arm64`
+- macOS ARM64: `repository-heatmap-darwin-arm64`
+
 ## Usage
 
 The command is divided into two subcommands: `analyze` and `visualize`.
