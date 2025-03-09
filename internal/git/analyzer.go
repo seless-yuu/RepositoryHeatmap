@@ -19,6 +19,8 @@ type RepositoryAnalyzer struct {
 	sinceDate   *time.Time
 	workerCount int
 	mutex       sync.Mutex
+	filePattern string // ファイルパターン（ワイルドカード）
+	fileType    string // ファイルタイプ（拡張子）
 }
 
 // NewAnalyzer は新しいRepositoryAnalyzerインスタンスを作成する
@@ -46,6 +48,16 @@ func (a *RepositoryAnalyzer) SetWorkerCount(count int) {
 		count = 1
 	}
 	a.workerCount = count
+}
+
+// SetFilePattern はファイルパターン（ワイルドカード）を設定する
+func (a *RepositoryAnalyzer) SetFilePattern(pattern string) {
+	a.filePattern = pattern
+}
+
+// SetFileType はファイルタイプ（拡張子）を設定する
+func (a *RepositoryAnalyzer) SetFileType(fileType string) {
+	a.fileType = fileType
 }
 
 // Open はリポジトリを開く
@@ -201,20 +213,31 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 		authorStat.CommitCount++
 		authors[authorName] = authorStat
 
-		// ファイル変更を処理
+		a.mutex.Unlock()
+
+		// ファイルの変更状況を解析
+		// 各コミットで変更されたファイルを追跡
 		stats, err := c.Stats()
 		if err != nil {
-			// エラーがあっても続行
-			a.mutex.Unlock()
+			// エラー処理
+			fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
 			continue
 		}
 
+		// 各ファイルの統計情報を更新
+		a.mutex.Lock()
 		for _, stat := range stats {
 			filePath := stat.Name
+			if !a.isFileMatched(filePath) {
+				continue
+			}
+
 			fileInfo, exists := a.stats.Files[filePath]
 			if !exists {
 				fileInfo = models.FileChangeInfo{
 					FilePath:       filePath,
+					ChangeCount:    0,
+					LastModified:   c.Author.When,
 					Authors:        make(map[string]int),
 					LineChanges:    make(map[int]int),
 					CommitMessages: []string{},
@@ -223,20 +246,62 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 				a.stats.FileCount++
 			}
 
-			// ファイル変更情報を更新
+			// 変更回数をカウント
 			fileInfo.ChangeCount++
-			fileInfo.LastModified = c.Committer.When
+			fileInfo.LastModified = c.Author.When
 			fileInfo.Authors[authorName]++
 
-			// コミットメッセージを保存（重複を避けるためには別の処理が必要）
-			fileInfo.CommitMessages = append(fileInfo.CommitMessages, c.Message)
+			// コミットメッセージを蓄積（最大5つまで）
+			if len(fileInfo.CommitMessages) < 5 {
+				if !containsString(fileInfo.CommitMessages, c.Message) {
+					fileInfo.CommitMessages = append(fileInfo.CommitMessages, c.Message)
+				}
+			}
 
 			a.stats.Files[filePath] = fileInfo
 		}
-
-		// ロックを解放
 		a.mutex.Unlock()
 	}
+}
+
+// 指定されたファイルパスがパターンに一致するか確認する
+func (a *RepositoryAnalyzer) isFileMatched(path string) bool {
+	// パターンが指定されていない場合は常にマッチ
+	if a.filePattern == "" && a.fileType == "" {
+		return true
+	}
+
+	// ファイル種別（拡張子）によるフィルタリング
+	if a.fileType != "" {
+		ext := filepath.Ext(path)
+		if ext == "" {
+			return false
+		}
+		// 拡張子の先頭の「.」を取り除いて比較
+		if ext[1:] != a.fileType {
+			return false
+		}
+	}
+
+	// ファイルパターンによるフィルタリング
+	if a.filePattern != "" {
+		matched, err := filepath.Match(a.filePattern, filepath.Base(path))
+		if err != nil || !matched {
+			return false
+		}
+	}
+
+	return true
+}
+
+// containsString はスライスに特定の文字列が含まれているか確認する
+func containsString(slice []string, str string) bool {
+	for _, item := range slice {
+		if item == str {
+			return true
+		}
+	}
+	return false
 }
 
 // calculateHeatLevels は各ファイルの変更頻度に基づいてヒートレベルを計算する
