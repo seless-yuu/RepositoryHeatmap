@@ -141,7 +141,7 @@ The following options can be used without a subcommand:
 - `<repository_name>-repository-heatmap.svg`: SVG heatmap of the entire repository
 - `file-heatmaps/`: Change frequency heatmaps for each file (SVG format)
 
-## Features
+## Feature Highlights
 
 - **SVG Link Functionality**: Links from the repository-wide heatmap to individual file heatmaps
 - **Line-by-Line Coloring**: Display of line-by-line coloring based on change frequency
