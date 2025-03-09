@@ -418,7 +418,7 @@ func visualizeCommand(args []string) {
 		logDebug("指定された入力JSONファイルを使用します: %s", jsonFilePath)
 	} else {
 		// 2. 最新のJSONファイルを検索
-		latestFile, err := findLatestJSONFile(absOutputDir)
+		latestFile, err := findLatestJSONFile(outputDir)
 		if err != nil {
 			logDebug("JSONファイルの検索に失敗しました: %v", err)
 			logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input (-i) オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
@@ -472,15 +472,12 @@ func visualizeCommand(args []string) {
 	logDebug("出力形式: %s", outputType)
 
 	// ヒートマップの可視化
-	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, stats)
+	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, stats, maxFiles, inputFile)
 
 	// リポジトリのパスが設定されていれば、それを使用（ファイル内容の読み込みに必要）
 	if localRepoPath != "" {
 		visualizer.SetRepoPath(localRepoPath)
 	}
-
-	// 最大表示ファイル数を設定
-	visualizer.SetMaxFilesToShow(maxFiles)
 
 	if err := visualizer.Visualize(); err != nil {
 		logDebug("ヒートマップの可視化に失敗しました: %v", err)
@@ -547,40 +544,65 @@ func readJSONFile(jsonFilePath string) (*models.RepositoryStats, error) {
 	return &data, nil
 }
 
-// 最新のJSONファイルを検索
+// findLatestJSONFile は最新のJSONファイルを検索する
 func findLatestJSONFile(outputDir string) (string, error) {
-	// 出力ディレクトリの絶対パスを取得
-	absOutputDir, err := filepath.Abs(outputDir)
-	if err != nil {
-		return "", fmt.Errorf("出力ディレクトリの絶対パス取得に失敗しました: %v", err)
-	}
-
-	// ディレクトリ内のファイル一覧を取得
-	files, err := os.ReadDir(absOutputDir)
-	if err != nil {
-		return "", fmt.Errorf("ディレクトリの読み込みに失敗しました: %v", err)
+	// 検索対象ディレクトリ
+	searchDirs := []string{
+		outputDir,     // 指定された出力ディレクトリ
+		".",           // カレントディレクトリ
+		"test-output", // test-outputディレクトリ
+		"output",      // outputディレクトリ
 	}
 
 	var latestTime time.Time
 	var latestFile string
+	var searchErrors []string
 
-	for _, file := range files {
-		info, err := file.Info()
+	// 各ディレクトリを検索
+	for _, dir := range searchDirs {
+		// ディレクトリの絶対パスを取得
+		absDir, err := filepath.Abs(dir)
 		if err != nil {
+			searchErrors = append(searchErrors, fmt.Sprintf("%s: %v", dir, err))
 			continue
 		}
 
-		if !info.IsDir() && filepath.Ext(file.Name()) == ".json" {
-			// JSONファイルの中で最新のものを選択
-			if info.ModTime().After(latestTime) {
-				latestTime = info.ModTime()
-				latestFile = filepath.Join(absOutputDir, file.Name())
+		// ディレクトリ内のファイル一覧を取得
+		files, err := os.ReadDir(absDir)
+		if err != nil {
+			searchErrors = append(searchErrors, fmt.Sprintf("%s: %v", absDir, err))
+			continue
+		}
+
+		// JSONファイルを検索
+		for _, file := range files {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+
+			if !info.IsDir() && filepath.Ext(file.Name()) == ".json" {
+				// JSONファイルの中で最新のものを選択
+				if info.ModTime().After(latestTime) {
+					latestTime = info.ModTime()
+					latestFile = filepath.Join(absDir, file.Name())
+				}
 			}
 		}
 	}
 
 	if latestFile == "" {
-		return "", fmt.Errorf("JSONファイルが見つかりませんでした")
+		errorMsg := "JSONファイルが見つかりませんでした。\n検索したディレクトリ:\n"
+		for _, dir := range searchDirs {
+			errorMsg += fmt.Sprintf("- %s\n", dir)
+		}
+		if len(searchErrors) > 0 {
+			errorMsg += "\n検索中のエラー:\n"
+			for _, err := range searchErrors {
+				errorMsg += fmt.Sprintf("- %s\n", err)
+			}
+		}
+		return "", fmt.Errorf(errorMsg)
 	}
 
 	return latestFile, nil
