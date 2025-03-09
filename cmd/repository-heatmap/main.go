@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,8 +27,6 @@ var (
 	sinceDate   string
 	workers     int
 	maxFiles    int
-	webMode     bool
-	webPort     int
 	version     = "0.1.0" // アプリケーションバージョン
 	logFile     *os.File
 	logger      *log.Logger
@@ -329,18 +326,9 @@ func analyzeCommand(args []string) {
 
 	// リポジトリ名を含むJSON出力ファイル名を生成
 	repoName := stats.RepositoryName
-	jsonFilePath := filepath.Join(absOutputDir, fmt.Sprintf("%s-heatmap.json", repoName))
-
-	// ヒートマップデータのJSONへの保存
-	logDebug("ヒートマップデータを生成中...")
-	jsonData, err := json.MarshalIndent(stats, "", "  ")
+	jsonFilePath, err := writeJSONResult(stats, absOutputDir, repoName)
 	if err != nil {
-		logDebug("ヒートマップデータのJSON変換に失敗しました: %v", err)
-		os.Exit(1)
-	}
-
-	if err := ioutil.WriteFile(jsonFilePath, jsonData, 0644); err != nil {
-		logDebug("ヒートマップデータのJSON保存に失敗しました: %v", err)
+		logDebug("JSONファイルの書き込みに失敗しました: %v", err)
 		os.Exit(1)
 	}
 
@@ -409,11 +397,11 @@ func visualizeCommand(args []string) {
 		os.Exit(1)
 	}
 
-	// JSONファイルの選択ロジック
+	// 入力JSONファイルを決定
 	var jsonFilePath string
 
-	// 1. 入力ファイルが直接指定されている場合
 	if inputFile != "" {
+		// 1. コマンドラインオプションで指定されたJSONファイル
 		absInputFile, err := filepath.Abs(inputFile)
 		if err != nil {
 			logDebug("入力ファイルパスの解決に失敗しました: %v", err)
@@ -429,72 +417,23 @@ func visualizeCommand(args []string) {
 		jsonFilePath = absInputFile
 		logDebug("指定された入力JSONファイルを使用します: %s", jsonFilePath)
 	} else {
-		// 2. リポジトリパスから推測
-		if repoPath != "" {
-			// リポジトリパスからリポジトリ名を取得
-			repoName := filepath.Base(repoPath)
-			// .git拡張子がある場合は削除
-			if filepath.Ext(repoName) == ".git" {
-				repoName = repoName[:len(repoName)-4]
-			}
-			logDebug("リポジトリ名: %s", repoName)
-
-			// リポジトリ名に対応するJSONファイルを探す
-			expectedJSONFile := repoName + "-heatmap.json"
-			expectedPath := filepath.Join(absOutputDir, expectedJSONFile)
-
-			if _, err := os.Stat(expectedPath); err == nil {
-				jsonFilePath = expectedPath
-				logDebug("リポジトリ名に対応するJSONファイルを使用します: %s", jsonFilePath)
-			} else {
-				logDebug("警告: リポジトリ名に対応するJSONファイルが見つかりません: %s", expectedPath)
-				// 見つからなかった場合は後続の処理で最新のJSONファイルを使用
-			}
+		// 2. 最新のJSONファイルを検索
+		latestFile, err := findLatestJSONFile(absOutputDir)
+		if err != nil {
+			logDebug("JSONファイルの検索に失敗しました: %v", err)
+			logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input (-i) オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
+			os.Exit(1)
 		}
-
-		// 3. 最新のJSONファイルを自動選択
-		if jsonFilePath == "" {
-			var latestTime time.Time
-			// 出力ディレクトリにJSONファイルがあるか検索
-			files, err := ioutil.ReadDir(absOutputDir)
-			if err != nil {
-				logDebug("出力ディレクトリの読み取りに失敗しました: %v", err)
-				os.Exit(1)
-			}
-
-			for _, file := range files {
-				if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-					// JSONファイルの中で最新のものを選択
-					if file.ModTime().After(latestTime) {
-						latestTime = file.ModTime()
-						jsonFilePath = filepath.Join(absOutputDir, file.Name())
-					}
-				}
-			}
-
-			if jsonFilePath != "" {
-				logDebug("最新のJSONファイルを使用します: %s", jsonFilePath)
-			}
-		}
-	}
-
-	if jsonFilePath == "" {
-		logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input (-i) オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
-		os.Exit(1)
+		jsonFilePath = latestFile
+		logDebug("最新のJSONファイルを使用します: %s", jsonFilePath)
 	}
 
 	logDebug("JSONファイルを読み込みます: %s", jsonFilePath)
 
 	// JSONファイルからデータを読み込む
-	jsonData, err := ioutil.ReadFile(jsonFilePath)
+	stats, err := readJSONFile(jsonFilePath)
 	if err != nil {
 		logDebug("JSONファイルの読み込みに失敗しました: %v", err)
-		os.Exit(1)
-	}
-
-	var stats models.RepositoryStats
-	if err := json.Unmarshal(jsonData, &stats); err != nil {
-		logDebug("JSONデータのパースに失敗しました: %v", err)
 		os.Exit(1)
 	}
 
@@ -533,7 +472,7 @@ func visualizeCommand(args []string) {
 	logDebug("出力形式: %s", outputType)
 
 	// ヒートマップの可視化
-	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, &stats)
+	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, stats)
 
 	// リポジトリのパスが設定されていれば、それを使用（ファイル内容の読み込みに必要）
 	if localRepoPath != "" {
@@ -565,6 +504,86 @@ func setupDebugLog() {
 			logger.Println("Repository Heatmap デバッグログ開始")
 		}
 	}
+}
+
+// JSONファイルに解析結果を書き込む
+func writeJSONResult(data *models.RepositoryStats, outputDir, repoName string) (string, error) {
+	// 出力ディレクトリが存在しない場合は作成
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("出力ディレクトリの作成に失敗しました: %v", err)
+	}
+
+	// JSONファイルパスの生成
+	jsonFilePath := filepath.Join(outputDir, fmt.Sprintf("%s-heatmap.json", repoName))
+
+	// JSONデータの生成
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("JSONエンコードに失敗しました: %v", err)
+	}
+
+	// ファイルに書き込み
+	if err := os.WriteFile(jsonFilePath, jsonData, 0644); err != nil {
+		return "", fmt.Errorf("JSONファイルの書き込みに失敗しました: %v", err)
+	}
+
+	return jsonFilePath, nil
+}
+
+// JSONファイルを読み込む
+func readJSONFile(jsonFilePath string) (*models.RepositoryStats, error) {
+	// JSONファイルの読み込み
+	jsonData, err := os.ReadFile(jsonFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("JSONファイルの読み込みに失敗しました: %v", err)
+	}
+
+	// JSONデータのデコード
+	var data models.RepositoryStats
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return nil, fmt.Errorf("JSONデコードに失敗しました: %v", err)
+	}
+
+	return &data, nil
+}
+
+// 最新のJSONファイルを検索
+func findLatestJSONFile(outputDir string) (string, error) {
+	// 出力ディレクトリの絶対パスを取得
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return "", fmt.Errorf("出力ディレクトリの絶対パス取得に失敗しました: %v", err)
+	}
+
+	// ディレクトリ内のファイル一覧を取得
+	files, err := os.ReadDir(absOutputDir)
+	if err != nil {
+		return "", fmt.Errorf("ディレクトリの読み込みに失敗しました: %v", err)
+	}
+
+	var latestTime time.Time
+	var latestFile string
+
+	for _, file := range files {
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		if !info.IsDir() && filepath.Ext(file.Name()) == ".json" {
+			// JSONファイルの中で最新のものを選択
+			if info.ModTime().After(latestTime) {
+				latestTime = info.ModTime()
+				latestFile = filepath.Join(absOutputDir, file.Name())
+			}
+		}
+	}
+
+	if latestFile == "" {
+		return "", fmt.Errorf("JSONファイルが見つかりませんでした")
+	}
+
+	return latestFile, nil
 }
 
 func main() {
