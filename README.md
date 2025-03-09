@@ -1,4 +1,7 @@
+
 # Repository Heatmap
+
+[日本語版README](README.ja.md)
 
 A tool for visualizing the frequency of changes in Git repositories. It visualizes the frequency of changes for each file and line-by-line changes as SVG heatmaps.
 
