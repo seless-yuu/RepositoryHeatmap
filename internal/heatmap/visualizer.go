@@ -484,7 +484,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 	// リポジトリパスが設定されていない場合はエラー
 	if v.repoPath == "" {
-		return nil, fmt.Errorf("リポジトリパスが設定されていません")
+		return nil, fmt.Errorf("リポジトリパスが設定されていません。--repo オプションでリポジトリのパスを指定してください")
 	}
 
 	// ファイルのフルパスを作成
@@ -534,7 +534,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	fileContent, err := v.readFileContent(filePath)
 	// エラーの場合は空の内容で続行
 	if err != nil {
-		fileContent = []string{"ファイルの内容を読み込めませんでした。"}
+		fileContent = []string{fmt.Sprintf("ファイルの内容を読み込めませんでした: %v", err)}
 	}
 
 	// 描画パラメータ
