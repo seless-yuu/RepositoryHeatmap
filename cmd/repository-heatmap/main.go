@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,6 +14,7 @@ import (
 	"github.com/repositoryheatmap/internal/heatmap"
 	"github.com/repositoryheatmap/internal/utils"
 	"github.com/repositoryheatmap/pkg/models"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -38,65 +38,100 @@ var (
 	fileType    string
 )
 
-// コマンドラインフラグの設定
-func setupCommonFlags() {
-	flag.StringVar(&outputDir, "output", "output", "出力ディレクトリ")
-	flag.BoolVar(&showVersion, "version", false, "バージョン情報を表示")
-	flag.BoolVar(&showHelp, "help", false, "ヘルプメッセージを表示")
-	flag.BoolVar(&debugLog, "debug", false, "デバッグログをファイルに出力")
-}
-
 // analyzeコマンド用のフラグ設定
-func setupAnalyzeFlags(analyzeCmd *flag.FlagSet) {
-	analyzeCmd.StringVar(&repoPath, "repo", "", "解析するGitリポジトリのパスまたはURL")
-	analyzeCmd.StringVar(&outputDir, "output", "output", "解析結果の出力ディレクトリ")
-	analyzeCmd.BoolVar(&skipClone, "skip-clone", false, "リポジトリが既にクローンされている場合はスキップ")
+func setupAnalyzeFlags(analyzeCmd *pflag.FlagSet) {
+	analyzeCmd.StringVarP(&repoPath, "repo", "r", "", "解析するGitリポジトリのパスまたはURL")
+	analyzeCmd.StringVarP(&outputDir, "output", "o", "output", "解析結果の出力ディレクトリ")
+	analyzeCmd.BoolVarP(&skipClone, "skip-clone", "s", false, "リポジトリが既にクローンされている場合はスキップ")
 	analyzeCmd.StringVar(&sinceDate, "since", "", "指定日付以降のコミットのみを解析 (YYYY-MM-DD形式)")
-	analyzeCmd.IntVar(&workers, "workers", 0, "並列ワーカー数（0: 自動、CPU数に基づく）")
-	analyzeCmd.BoolVar(&showHelp, "help", false, "ヘルプを表示")
-	analyzeCmd.BoolVar(&debugLog, "debug", false, "デバッグログをファイルに出力")
-	analyzeCmd.StringVar(&filePattern, "file-pattern", "", "解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）")
-	analyzeCmd.StringVar(&fileType, "file-type", "", "解析対象のファイル種別（拡張子のみ、例: 'go'）")
+	analyzeCmd.IntVarP(&workers, "workers", "w", 0, "並列ワーカー数（0: 自動、CPU数に基づく）")
+	analyzeCmd.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
+	analyzeCmd.BoolVarP(&debugLog, "debug", "d", false, "デバッグログをファイルに出力")
+	analyzeCmd.StringVarP(&filePattern, "file-pattern", "p", "", "解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）")
+	analyzeCmd.StringVarP(&fileType, "file-type", "t", "", "解析対象のファイル種別（拡張子のみ、例: 'go'）")
 }
 
 // visualizeコマンド用のフラグ設定
-func setupVisualizeFlags(visualizeCmd *flag.FlagSet) {
-	visualizeCmd.StringVar(&outputDir, "output", "output", "ヒートマップ出力ディレクトリ")
-	visualizeCmd.StringVar(&outputType, "format", "svg", "出力形式 (svg または webp)")
-	visualizeCmd.StringVar(&repoPath, "repo", "", "ファイル内容表示のためのリポジトリパス（必須ではない）")
-	visualizeCmd.IntVar(&maxFiles, "max-files", 100, "ヒートマップに表示する最大ファイル数")
-	visualizeCmd.BoolVar(&debugLog, "debug", false, "デバッグログをファイルに出力")
-	visualizeCmd.StringVar(&inputFile, "input", "", "入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）")
+func setupVisualizeFlags(visualizeCmd *pflag.FlagSet) {
+	visualizeCmd.StringVarP(&outputDir, "output", "o", "output", "ヒートマップ出力ディレクトリ")
+	visualizeCmd.StringVarP(&outputType, "format", "f", "svg", "出力形式 (svg または webp)")
+	visualizeCmd.StringVarP(&repoPath, "repo", "r", "", "ファイル内容表示のためのリポジトリパス（必須ではない）")
+	visualizeCmd.IntVarP(&maxFiles, "max-files", "m", 100, "ヒートマップに表示する最大ファイル数")
+	visualizeCmd.BoolVarP(&debugLog, "debug", "d", false, "デバッグログをファイルに出力")
+	visualizeCmd.StringVarP(&inputFile, "input", "i", "", "入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）")
+	visualizeCmd.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
 }
 
 // analyzeコマンドのヘルプメッセージ
-func showAnalyzeHelp(analyzeCmd *flag.FlagSet) {
+func showAnalyzeHelp(analyzeCmd *pflag.FlagSet) {
 	fmt.Println("Repository Heatmap - リポジトリ解析コマンド")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s analyze [options]\n\n", os.Args[0])
 	fmt.Println("Gitリポジトリを解析し、ヒートマップデータを生成します。")
 	fmt.Println()
 	fmt.Println("Options:")
-	analyzeCmd.PrintDefaults()
+
+	// pflagのデフォルトでは短いオプションがデフォルトのPrintDefaultsで表示されないため、
+	// カスタマイズしたヘルプ表示を使用
+	fmt.Printf("  -d, --debug\n")
+	fmt.Printf("        デバッグログをファイルに出力\n")
+	fmt.Printf("  -p, --file-pattern string\n")
+	fmt.Printf("        解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）\n")
+	fmt.Printf("  -t, --file-type string\n")
+	fmt.Printf("        解析対象のファイル種別（拡張子のみ、例: 'go'）\n")
+	fmt.Printf("  -h, --help\n")
+	fmt.Printf("        ヘルプを表示\n")
+	fmt.Printf("  -o, --output string (default \"output\")\n")
+	fmt.Printf("        解析結果の出力ディレクトリ\n")
+	fmt.Printf("  -r, --repo string\n")
+	fmt.Printf("        解析するGitリポジトリのパスまたはURL\n")
+	fmt.Printf("  --since string\n")
+	fmt.Printf("        指定日付以降のコミットのみを解析 (YYYY-MM-DD形式)\n")
+	fmt.Printf("  -s, --skip-clone\n")
+	fmt.Printf("        リポジトリが既にクローンされている場合はスキップ\n")
+	fmt.Printf("  -w, --workers int\n")
+	fmt.Printf("        並列ワーカー数（0: 自動、CPU数に基づく）\n")
+
 	fmt.Println()
 	fmt.Println("例:")
 	fmt.Printf("  %s analyze --repo=./myrepo --output=./results\n", os.Args[0])
+	fmt.Printf("  %s analyze -r ./myrepo -o ./results\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=https://github.com/username/repo.git\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=./myrepo --since=2023-01-01\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=./myrepo --workers=4\n", os.Args[0])
+	fmt.Printf("  %s analyze -r ./myrepo -w 4\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=./myrepo --file-pattern=\"*.go\" --output=./results\n", os.Args[0])
+	fmt.Printf("  %s analyze -r ./myrepo -p \"*.go\" -o ./results\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=./myrepo --file-type=js --output=./results\n", os.Args[0])
+	fmt.Printf("  %s analyze -r ./myrepo -t js -o ./results\n", os.Args[0])
 }
 
 // visualizeコマンドのヘルプメッセージ
-func showVisualizeHelp(visualizeCmd *flag.FlagSet) {
+func showVisualizeHelp(visualizeCmd *pflag.FlagSet) {
 	fmt.Println("Repository Heatmap - ヒートマップ可視化コマンド")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s visualize [options]\n\n", os.Args[0])
 	fmt.Println("リポジトリ解析データからヒートマップを生成します。")
 	fmt.Println()
 	fmt.Println("Options:")
-	visualizeCmd.PrintDefaults()
+
+	// pflagのデフォルトでは短いオプションがデフォルトのPrintDefaultsで表示されないため、
+	// カスタマイズしたヘルプ表示を使用
+	fmt.Printf("  -d, --debug\n")
+	fmt.Printf("        デバッグログをファイルに出力\n")
+	fmt.Printf("  -f, --format string (default \"svg\")\n")
+	fmt.Printf("        出力形式 (svg または webp)\n")
+	fmt.Printf("  -h, --help\n")
+	fmt.Printf("        ヘルプを表示\n")
+	fmt.Printf("  -i, --input string\n")
+	fmt.Printf("        入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）\n")
+	fmt.Printf("  -m, --max-files int (default 100)\n")
+	fmt.Printf("        ヒートマップに表示する最大ファイル数\n")
+	fmt.Printf("  -o, --output string (default \"output\")\n")
+	fmt.Printf("        ヒートマップ出力ディレクトリ\n")
+	fmt.Printf("  -r, --repo string\n")
+	fmt.Printf("        ファイル内容表示のためのリポジトリパス（必須ではない）\n")
+
 	fmt.Println()
 	fmt.Println("出力形式:")
 	fmt.Println("  svg  - SVG形式のベクターグラフィックス（リポジトリ全体と個別ファイルのヒートマップを生成）")
@@ -104,10 +139,15 @@ func showVisualizeHelp(visualizeCmd *flag.FlagSet) {
 	fmt.Println()
 	fmt.Println("例:")
 	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --output=./results\n", os.Args[0])
+	fmt.Printf("  %s visualize -i ./results/repo-heatmap.json -o ./results\n", os.Args[0])
 	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --format=svg\n", os.Args[0])
+	fmt.Printf("  %s visualize -i ./results/repo-heatmap.json -f svg\n", os.Args[0])
 	fmt.Printf("  %s visualize --output=./results --format=svg\n", os.Args[0])
+	fmt.Printf("  %s visualize -o ./results -f svg\n", os.Args[0])
 	fmt.Printf("  %s visualize --output=./results --repo=/path/to/repo\n", os.Args[0])
+	fmt.Printf("  %s visualize -o ./results -r /path/to/repo\n", os.Args[0])
 	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --max-files=200\n", os.Args[0])
+	fmt.Printf("  %s visualize -i ./results/repo-heatmap.json -m 200\n", os.Args[0])
 }
 
 // 全体のヘルプメッセージ
@@ -118,6 +158,9 @@ func showMainHelp() {
 	fmt.Println("Commands:")
 	fmt.Println("  analyze    リポジトリを解析しJSONデータを生成")
 	fmt.Println("  visualize  JSONデータからヒートマップを生成")
+	fmt.Println()
+	fmt.Println("バージョン情報:")
+	fmt.Printf("  %s --version\n", os.Args[0])
 	fmt.Println("\nオプションを確認するには:")
 	fmt.Printf("  %s analyze --help\n", os.Args[0])
 	fmt.Printf("  %s visualize --help\n", os.Args[0])
@@ -138,7 +181,10 @@ func logDebug(format string, v ...interface{}) {
 
 // analyzeCommand はリポジトリの解析を行い、JSONデータを生成する
 func analyzeCommand(args []string) {
-	analyzeCmd := flag.NewFlagSet("analyze", flag.ExitOnError)
+	// pflagを使用してフラグを設定
+	analyzeCmd := pflag.NewFlagSet("analyze", pflag.ExitOnError)
+
+	// フラグの設定
 	setupAnalyzeFlags(analyzeCmd)
 
 	// ヘルプメッセージのカスタマイズ
@@ -146,26 +192,32 @@ func analyzeCommand(args []string) {
 		showAnalyzeHelp(analyzeCmd)
 	}
 
-	analyzeCmd.Parse(args)
+	// 特殊なケース：明示的に-hや--helpが指定された場合に対応
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			analyzeCmd.Usage()
+			return
+		}
+	}
+
+	// フラグを解析
+	if err := analyzeCmd.Parse(args); err != nil {
+		fmt.Printf("フラグの解析エラー: %v\n", err)
+		analyzeCmd.Usage()
+		os.Exit(1)
+	}
+
+	// showHelpフラグが直接設定された場合
+	if showHelp {
+		analyzeCmd.Usage()
+		return
+	}
 
 	// デバッグログの設定
 	setupDebugLog()
 
 	// コマンドを表示
 	logDebug("実行コマンド: %s analyze", os.Args[0])
-
-	// ヘルプ表示
-	if showHelp || len(args) == 0 {
-		showAnalyzeHelp(analyzeCmd)
-		return
-	}
-
-	// 必須パラメータチェック
-	if repoPath == "" {
-		logDebug("エラー: リポジトリパスを指定してください（--repo オプション）\n")
-		showAnalyzeHelp(analyzeCmd)
-		os.Exit(1)
-	}
 
 	// 日付パラメータのパース
 	var since *time.Time
@@ -298,7 +350,10 @@ func analyzeCommand(args []string) {
 
 // visualizeCommand はJSON出力からヒートマップを生成する
 func visualizeCommand(args []string) {
-	visualizeCmd := flag.NewFlagSet("visualize", flag.ExitOnError)
+	// pflagを使用してフラグを設定
+	visualizeCmd := pflag.NewFlagSet("visualize", pflag.ExitOnError)
+
+	// フラグの設定
 	setupVisualizeFlags(visualizeCmd)
 
 	// ヘルプメッセージのカスタマイズ
@@ -306,7 +361,26 @@ func visualizeCommand(args []string) {
 		showVisualizeHelp(visualizeCmd)
 	}
 
-	visualizeCmd.Parse(args)
+	// 特殊なケース：明示的に-hや--helpが指定された場合に対応
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			visualizeCmd.Usage()
+			return
+		}
+	}
+
+	// フラグを解析
+	if err := visualizeCmd.Parse(args); err != nil {
+		fmt.Printf("フラグの解析エラー: %v\n", err)
+		visualizeCmd.Usage()
+		os.Exit(1)
+	}
+
+	// showHelpフラグが直接設定された場合
+	if showHelp {
+		visualizeCmd.Usage()
+		return
+	}
 
 	// デバッグログの設定
 	setupDebugLog()
@@ -314,16 +388,10 @@ func visualizeCommand(args []string) {
 	// コマンドを表示
 	logDebug("実行コマンド: %s visualize", os.Args[0])
 
-	// ヘルプ表示
-	if showHelp || len(args) == 0 {
-		showVisualizeHelp(visualizeCmd)
-		return
-	}
-
 	// 出力ディレクトリのチェック
 	if outputDir == "" {
-		logDebug("エラー: 出力ディレクトリを指定してください（--output オプション）\n")
-		showVisualizeHelp(visualizeCmd)
+		logDebug("エラー: 出力ディレクトリを指定してください（--output または -o オプション）\n")
+		visualizeCmd.Usage()
 		os.Exit(1)
 	}
 
@@ -411,7 +479,7 @@ func visualizeCommand(args []string) {
 	}
 
 	if jsonFilePath == "" {
-		logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
+		logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input (-i) オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
 		os.Exit(1)
 	}
 
@@ -500,6 +568,26 @@ func setupDebugLog() {
 }
 
 func main() {
+	// グローバルフラグの設定
+	globalFlags := pflag.NewFlagSet("global", pflag.ExitOnError)
+	globalFlags.BoolVarP(&showVersion, "version", "v", false, "バージョン情報を表示")
+	globalFlags.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
+
+	// グローバルフラグを解析（先頭の引数だけを見る）
+	if len(os.Args) > 1 {
+		// --versionフラグのチェック
+		if os.Args[1] == "--version" || os.Args[1] == "-v" {
+			fmt.Printf("Repository Heatmap v%s\n", version)
+			return
+		}
+
+		// --helpフラグのチェック
+		if os.Args[1] == "--help" || os.Args[1] == "-h" {
+			showMainHelp()
+			return
+		}
+	}
+
 	// サブコマンドがない場合はヘルプを表示
 	if len(os.Args) < 2 {
 		showMainHelp()
@@ -512,10 +600,6 @@ func main() {
 		analyzeCommand(os.Args[2:])
 	case "visualize":
 		visualizeCommand(os.Args[2:])
-	case "--version":
-		fmt.Printf("Repository Heatmap v%s\n", version)
-	case "--help", "-h":
-		showMainHelp()
 	default:
 		fmt.Printf("エラー: 不明なコマンド '%s'\n", os.Args[1])
 		showMainHelp()
