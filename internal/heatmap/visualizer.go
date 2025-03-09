@@ -2,6 +2,7 @@ package heatmap
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -547,7 +548,7 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 		errMsg += fmt.Sprintf("- %s\n", path)
 	}
 
-	return nil, fmt.Errorf(errMsg)
+	return nil, errors.New(errMsg)
 }
 
 func (v *Visualizer) readFile(fullPath string) ([]string, error) {
