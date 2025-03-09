@@ -94,17 +94,17 @@ func (v *Visualizer) Visualize() error {
 
 // GetHeatColor は熱レベルに応じた色を返す
 func GetHeatColor(heatLevel float64) string {
-	// 目に優しい色のグラデーション（青から赤へ）
+	// 目に優しい暖色系のグラデーション（低温から高温へ）
 	if heatLevel < 0.2 {
-		return "#E3F2FD" // 非常に薄い青（低）
+		return "#FFF5E6" // 非常に薄い黄色（低）
 	} else if heatLevel < 0.4 {
-		return "#90CAF9" // 薄い青（やや低）
+		return "#FFE0B2" // 薄い橙色（やや低）
 	} else if heatLevel < 0.6 {
-		return "#42A5F5" // 中程度の青（中）
+		return "#FFAB66" // 中程度の橙色（中）
 	} else if heatLevel < 0.8 {
-		return "#1E88E5" // やや濃い青（やや高）
+		return "#FF8533" // やや濃い橙色（やや高）
 	} else {
-		return "#1565C0" // 濃い青（高）
+		return "#E65C00" // 濃い橙色（高）
 	}
 }
 
@@ -161,20 +161,20 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
-  <text x="%d" y="40" font-size="24" font-family="Arial" text-anchor="middle">%s リポジトリヒートマップ</text>
-  <text x="%d" y="70" font-size="14" font-family="Arial" text-anchor="middle">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
-  <text x="%d" y="90" font-size="12" font-family="Arial" text-anchor="middle">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
+  <text x="%d" y="40" font-size="24" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">%s リポジトリヒートマップ</text>
+  <text x="%d" y="70" font-size="14" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
+  <text x="%d" y="90" font-size="12" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
   
   <!-- 凡例 -->
   <g transform="translate(50, 30)">
-    <text x="0" y="0" font-size="12" font-family="Arial">変更頻度:</text>
-    <rect x="80" y="-10" width="20" height="12" fill="#0000FF" />
-    <text x="105" y="0" font-size="10" font-family="Arial">低</text>
-    <rect x="130" y="-10" width="20" height="12" fill="#0066FF" />
-    <rect x="180" y="-10" width="20" height="12" fill="#00FF00" />
-    <rect x="230" y="-10" width="20" height="12" fill="#FFCC00" />
-    <rect x="280" y="-10" width="20" height="12" fill="#FF0000" />
-    <text x="305" y="0" font-size="10" font-family="Arial">高</text>
+    <text x="0" y="0" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="#333333">変更頻度:</text>
+    <rect x="80" y="-10" width="20" height="12" fill="#FFF5E6" />
+    <text x="105" y="0" font-size="10" font-family="Segoe UI, Helvetica, Arial" fill="#333333">低</text>
+    <rect x="130" y="-10" width="20" height="12" fill="#FFE0B2" />
+    <rect x="180" y="-10" width="20" height="12" fill="#FFAB66" />
+    <rect x="230" y="-10" width="20" height="12" fill="#FF8533" />
+    <rect x="280" y="-10" width="20" height="12" fill="#E65C00" />
+    <text x="305" y="0" font-size="10" font-family="Segoe UI, Helvetica, Arial" fill="#333333">高</text>
   </g>
 `,
 		canvasWidth, canvasHeight,
@@ -403,7 +403,7 @@ func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
 		}
 
 		fmt.Fprintf(file, `
-  <text x="%.1f" y="%.1f" font-size="14" font-family="Arial" fill="#000000" pointer-events="none">%s</text>`,
+  <text x="%.1f" y="%.1f" font-size="14" font-family="Segoe UI, Helvetica, Arial" fill="#000000" pointer-events="none">%s</text>`,
 			rect.X+4, rect.Y+16, displayName)
 	}
 
@@ -647,11 +647,11 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 <svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
   <a href="../%s-repository-heatmap.%s" title="リポジトリ全体のヒートマップに戻る">
-    <text x="50" y="30" font-size="16" font-family="Arial" fill="#0066cc">← リポジトリ全体に戻る</text>
+    <text x="50" y="30" font-size="16" font-family="Segoe UI, Helvetica, Arial" fill="#333333">← リポジトリ全体に戻る</text>
   </a>
-  <text x="600" y="40" font-size="24" font-family="Arial" text-anchor="middle">ファイルヒートマップ</text>
-  <text x="600" y="70" font-size="14" font-family="Arial" text-anchor="middle">%s</text>
-  <text x="600" y="90" font-size="12" font-family="Arial" text-anchor="middle">変更回数: %d, 最終更新: %s</text>
+  <text x="600" y="40" font-size="24" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#333333">ファイルヒートマップ</text>
+  <text x="600" y="70" font-size="14" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#333333">%s</text>
+  <text x="600" y="90" font-size="12" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#666666">変更回数: %d, 最終更新: %s</text>
 
   <!-- スクロール可能なコードビュー -->
   <g transform="translate(%d, %d)">
@@ -687,8 +687,8 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		// 行を描画
 		fmt.Fprintf(file, `    <g>
       <rect x="0" y="%d" width="%d" height="%d" fill="%s" />
-      <text x="-10" y="%d" text-anchor="end" font-size="12" font-family="monospace">%d</text>
-      <text x="5" y="%d" font-size="12" font-family="monospace">%s</text>
+      <text x="-10" y="%d" text-anchor="end" font-size="12" font-family="Consolas, Menlo, monospace" fill="#666666">%d</text>
+      <text x="5" y="%d" font-size="12" font-family="Consolas, Menlo, monospace" fill="#333333">%s</text>
     </g>
 `,
 			i*lineHeight, maxWidth-marginLeft-marginRight, lineHeight, lineColor,
