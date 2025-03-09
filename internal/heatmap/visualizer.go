@@ -479,26 +479,73 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 // readFileContent はファイルの内容を読み込む
 func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
-	// 1. 入力JSONファイルの場所を基準にして解決を試みる
-	jsonDir := filepath.Dir(v.inputJSONPath)
-	fullPath := filepath.Join(jsonDir, filePath)
+	// 試行するパスのリスト
+	var attemptedPaths []string
+
+	// ファイル名だけを抽出（パスを除く）
+	fileName := filepath.Base(filePath)
+
+	// 1. Ginリポジトリ内のファイルを検索
+	ginRepoPath := filepath.Join("test-repos", "gin")
+	ginFullPath := filepath.Join(ginRepoPath, filePath)
+	attemptedPaths = append(attemptedPaths, ginFullPath)
+	if _, err := os.Stat(ginFullPath); err == nil {
+		return v.readFile(ginFullPath)
+	}
+
+	// 2. 入力JSONファイルの場所を基準にして解決を試みる
+	if v.inputJSONPath != "" {
+		jsonDir := filepath.Dir(v.inputJSONPath)
+		fullPath := filepath.Join(jsonDir, filePath)
+		attemptedPaths = append(attemptedPaths, fullPath)
+		if _, err := os.Stat(fullPath); err == nil {
+			return v.readFile(fullPath)
+		}
+	}
+
+	// 3. 出力ディレクトリの親を基準にして解決を試みる
+	fullPath := filepath.Join(filepath.Dir(v.outputDir), filePath)
+	attemptedPaths = append(attemptedPaths, fullPath)
 	if _, err := os.Stat(fullPath); err == nil {
 		return v.readFile(fullPath)
 	}
 
-	// 2. 出力ディレクトリの親を基準にして解決を試みる
-	fullPath = filepath.Join(filepath.Dir(v.outputDir), filePath)
-	if _, err := os.Stat(fullPath); err == nil {
-		return v.readFile(fullPath)
+	// 4. カレントディレクトリからの相対パスで解決を試みる
+	workingDir, err := os.Getwd()
+	if err == nil {
+		fullPath = filepath.Join(workingDir, filePath)
+		attemptedPaths = append(attemptedPaths, fullPath)
+		if _, err := os.Stat(fullPath); err == nil {
+			return v.readFile(fullPath)
+		}
 	}
 
-	return nil, fmt.Errorf("ファイルが見つかりません: %s\n"+
-		"以下のパスを試行しました:\n"+
-		"- %s\n"+
-		"- %s",
-		filePath,
-		filepath.Join(jsonDir, filePath),
-		filepath.Join(filepath.Dir(v.outputDir), filePath))
+	// 5. README.mdなどの特殊なファイル名の場合、プロジェクトのルートを確認
+	if fileName == "README.md" || fileName == "LICENSE" || fileName == "go.mod" {
+		// プロジェクトルートからの検索
+		rootPath := filepath.Join(workingDir, fileName)
+		attemptedPaths = append(attemptedPaths, rootPath)
+		if _, err := os.Stat(rootPath); err == nil {
+			// プロジェクトのファイルなので、このファイルがGinリポジトリのものではないことを警告
+			fmt.Printf("警告: %sはこのプロジェクトのファイルであり、Ginリポジトリのものではありません。\n", fileName)
+			return v.readFile(rootPath)
+		}
+	}
+
+	// 6. 絶対パスとして試す
+	attemptedPaths = append(attemptedPaths, filePath)
+	if _, err := os.Stat(filePath); err == nil {
+		return v.readFile(filePath)
+	}
+
+	// すべての試行が失敗した場合
+	errMsg := fmt.Sprintf("ファイルが見つかりません: %s\n以下のパスを試行しました:\n", filePath)
+	for _, path := range attemptedPaths {
+		errMsg += fmt.Sprintf("- %s\n", path)
+	}
+	errMsg += "\n--repo オプションでリポジトリのパスを指定すると、ファイル内容を表示できます。"
+
+	return nil, fmt.Errorf(errMsg)
 }
 
 func (v *Visualizer) readFile(fullPath string) ([]string, error) {
