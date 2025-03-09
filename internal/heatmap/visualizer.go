@@ -482,15 +482,23 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 	// 試行するパスのリスト
 	var attemptedPaths []string
 
+	// JSONからリポジトリ名を取得
+	repoName := ""
+	if v.stats != nil && v.stats.RepositoryName != "" {
+		repoName = v.stats.RepositoryName
+	} else {
+		// 後方互換性のため、JSONファイル名からもリポジトリ名を推測
+		if v.inputJSONPath != "" {
+			repoName = strings.TrimSuffix(filepath.Base(v.inputJSONPath), "-heatmap.json")
+		}
+	}
+
 	// 1. 入力JSONファイルの場所を基準にして解決を試みる
-	// input.json があるディレクトリと同じ階層に対象リポジトリがあると想定
-	if v.inputJSONPath != "" {
+	if v.inputJSONPath != "" && repoName != "" {
 		// JSONファイルのディレクトリを取得
 		jsonDir := filepath.Dir(v.inputJSONPath)
-		// リポジトリの名前をJSONファイル名から取得（例: gin-heatmap.json → gin）
-		repoName := strings.TrimSuffix(filepath.Base(v.inputJSONPath), "-heatmap.json")
 
-		// リポジトリパスを構築（JSONディレクトリの親ディレクトリ + リポジトリ名）
+		// パターン1: JSONディレクトリの親ディレクトリ + リポジトリ名
 		repoPath := filepath.Join(filepath.Dir(jsonDir), repoName)
 		fullPath := filepath.Join(repoPath, filePath)
 		attemptedPaths = append(attemptedPaths, fullPath)
@@ -498,12 +506,22 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 			return v.readFile(fullPath)
 		}
 
-		// JSONファイルと同じディレクトリ内にテスト用リポジトリがある場合を想定
+		// パターン2: JSONディレクトリの同じ階層のtest-reposディレクトリ + リポジトリ名
 		testRepoPath := filepath.Join(jsonDir, "..", "test-repos", repoName)
 		fullPath = filepath.Join(testRepoPath, filePath)
 		attemptedPaths = append(attemptedPaths, fullPath)
 		if _, err := os.Stat(fullPath); err == nil {
 			return v.readFile(fullPath)
+		}
+
+		// パターン3: カレントディレクトリのtest-reposディレクトリ + リポジトリ名
+		workingDir, err := os.Getwd()
+		if err == nil {
+			testPath := filepath.Join(workingDir, "test-repos", repoName, filePath)
+			attemptedPaths = append(attemptedPaths, testPath)
+			if _, err := os.Stat(testPath); err == nil {
+				return v.readFile(testPath)
+			}
 		}
 	}
 
