@@ -1,4 +1,3 @@
-
 # Repository Heatmap
 
 [日本語版README](README.ja.md)
@@ -25,7 +24,11 @@ A tool for visualizing the frequency of changes in Git repositories. It visualiz
 
 ### Download Binary
 
-You can download the latest binary from the [releases page](https://github.com/your-username/repositoryheatmap/releases).
+You can download the latest binary for your platform from the [releases page](https://github.com/your-username/repositoryheatmap/releases):
+
+- Windows AMD64: `repository-heatmap-windows-amd64.exe`
+- macOS Apple Silicon: `repository-heatmap-darwin-arm64`
+- Linux AMD64: `repository-heatmap-linux-amd64`
 
 ### Build from Source
 
@@ -37,8 +40,18 @@ cd repositoryheatmap
 # Install dependencies
 go mod download
 
-# Build
+# Build for your current platform
 go build -o repository-heatmap ./cmd/repository-heatmap
+
+# Cross-compile for specific platforms
+# For Windows AMD64
+go build -o repository-heatmap-windows-amd64.exe ./cmd/repository-heatmap/main.go
+
+# For macOS Apple Silicon (ARM64)
+GOOS=darwin GOARCH=arm64 go build -o repository-heatmap-darwin-arm64 ./cmd/repository-heatmap/main.go
+
+# For Linux AMD64
+GOOS=linux GOARCH=amd64 go build -o repository-heatmap-linux-amd64 ./cmd/repository-heatmap/main.go
 ```
 
 ## Usage

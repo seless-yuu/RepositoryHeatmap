@@ -15,7 +15,11 @@ Gitリポジトリの変更頻度を可視化するヒートマップ生成ツ�
 
 ### バイナリのダウンロード
 
-[リリースページ](https://github.com/your-username/repositoryheatmap/releases)から最新のバイナリをダウンロードできます。
+[リリースページ](https://github.com/your-username/repositoryheatmap/releases)から各プラットフォーム用の最新バイナリをダウンロードできます：
+
+- Windows AMD64: `repository-heatmap-windows-amd64.exe`
+- macOS Apple Silicon: `repository-heatmap-darwin-arm64`
+- Linux AMD64: `repository-heatmap-linux-amd64`
 
 ### ソースからビルド
 
@@ -27,8 +31,18 @@ cd repositoryheatmap
 # 依存関係のインストール
 go mod download
 
-# ビルド
+# 現在のプラットフォーム向けにビルド
 go build -o repository-heatmap ./cmd/repository-heatmap
+
+# 特定のプラットフォーム向けにクロスコンパイル
+# Windows AMD64向け
+go build -o repository-heatmap-windows-amd64.exe ./cmd/repository-heatmap/main.go
+
+# macOS Apple Silicon (ARM64)向け
+GOOS=darwin GOARCH=arm64 go build -o repository-heatmap-darwin-arm64 ./cmd/repository-heatmap/main.go
+
+# Linux AMD64向け
+GOOS=linux GOARCH=amd64 go build -o repository-heatmap-linux-amd64 ./cmd/repository-heatmap/main.go
 ```
 
 ## 使い方
