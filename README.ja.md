@@ -53,6 +53,7 @@ GOOS=linux GOARCH=amd64 go build -o repository-heatmap-linux-amd64 ./cmd/reposit
 - macOS/Linux環境：`./build.sh`を実行してすべてのサポートプラットフォーム向けにビルドします（先に`chmod +x build.sh`でスクリプトに実行権限を付与してください）。
 
 これらのスクリプトは以下のプラットフォーム向けの実行ファイルを作成します：
+
 - Windows AMD64：`repository-heatmap-windows-amd64.exe`
 - Windows ARM64：`repository-heatmap-windows-arm64.exe`
 - Linux AMD64：`repository-heatmap-linux-amd64`
