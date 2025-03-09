@@ -62,6 +62,7 @@ For convenience, the repository includes build scripts that automatically compil
 - On macOS/Linux: Run `./build.sh` to build for all supported platforms (make the script executable first with `chmod +x build.sh`).
 
 These scripts will create executables for the following platforms:
+
 - Windows AMD64: `repository-heatmap-windows-amd64.exe`
 - Windows ARM64: `repository-heatmap-windows-arm64.exe`
 - Linux AMD64: `repository-heatmap-linux-amd64`
