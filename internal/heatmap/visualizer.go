@@ -482,68 +482,52 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 	// 試行するパスのリスト
 	var attemptedPaths []string
 
-	// ファイル名だけを抽出（パスを除く）
-	fileName := filepath.Base(filePath)
-
-	// 1. Ginリポジトリ内のファイルを検索
-	ginRepoPath := filepath.Join("test-repos", "gin")
-	ginFullPath := filepath.Join(ginRepoPath, filePath)
-	attemptedPaths = append(attemptedPaths, ginFullPath)
-	if _, err := os.Stat(ginFullPath); err == nil {
-		return v.readFile(ginFullPath)
-	}
-
-	// 2. 入力JSONファイルの場所を基準にして解決を試みる
+	// 1. 入力JSONファイルの場所を基準にして解決を試みる
+	// input.json があるディレクトリと同じ階層に対象リポジトリがあると想定
 	if v.inputJSONPath != "" {
+		// JSONファイルのディレクトリを取得
 		jsonDir := filepath.Dir(v.inputJSONPath)
-		fullPath := filepath.Join(jsonDir, filePath)
+		// リポジトリの名前をJSONファイル名から取得（例: gin-heatmap.json → gin）
+		repoName := strings.TrimSuffix(filepath.Base(v.inputJSONPath), "-heatmap.json")
+
+		// リポジトリパスを構築（JSONディレクトリの親ディレクトリ + リポジトリ名）
+		repoPath := filepath.Join(filepath.Dir(jsonDir), repoName)
+		fullPath := filepath.Join(repoPath, filePath)
+		attemptedPaths = append(attemptedPaths, fullPath)
+		if _, err := os.Stat(fullPath); err == nil {
+			return v.readFile(fullPath)
+		}
+
+		// JSONファイルと同じディレクトリ内にテスト用リポジトリがある場合を想定
+		testRepoPath := filepath.Join(jsonDir, "..", "test-repos", repoName)
+		fullPath = filepath.Join(testRepoPath, filePath)
 		attemptedPaths = append(attemptedPaths, fullPath)
 		if _, err := os.Stat(fullPath); err == nil {
 			return v.readFile(fullPath)
 		}
 	}
 
-	// 3. 出力ディレクトリの親を基準にして解決を試みる
-	fullPath := filepath.Join(filepath.Dir(v.outputDir), filePath)
-	attemptedPaths = append(attemptedPaths, fullPath)
-	if _, err := os.Stat(fullPath); err == nil {
-		return v.readFile(fullPath)
-	}
-
-	// 4. カレントディレクトリからの相対パスで解決を試みる
+	// 2. 相対パスをそのまま試す（カレントディレクトリからの相対パス）
 	workingDir, err := os.Getwd()
 	if err == nil {
-		fullPath = filepath.Join(workingDir, filePath)
+		fullPath := filepath.Join(workingDir, filePath)
 		attemptedPaths = append(attemptedPaths, fullPath)
 		if _, err := os.Stat(fullPath); err == nil {
 			return v.readFile(fullPath)
 		}
 	}
 
-	// 5. README.mdなどの特殊なファイル名の場合、プロジェクトのルートを確認
-	if fileName == "README.md" || fileName == "LICENSE" || fileName == "go.mod" {
-		// プロジェクトルートからの検索
-		rootPath := filepath.Join(workingDir, fileName)
-		attemptedPaths = append(attemptedPaths, rootPath)
-		if _, err := os.Stat(rootPath); err == nil {
-			// プロジェクトのファイルなので、このファイルがGinリポジトリのものではないことを警告
-			fmt.Printf("警告: %sはこのプロジェクトのファイルであり、Ginリポジトリのものではありません。\n", fileName)
-			return v.readFile(rootPath)
-		}
-	}
-
-	// 6. 絶対パスとして試す
+	// 3. 絶対パスとして試す
 	attemptedPaths = append(attemptedPaths, filePath)
 	if _, err := os.Stat(filePath); err == nil {
 		return v.readFile(filePath)
 	}
 
 	// すべての試行が失敗した場合
-	errMsg := fmt.Sprintf("ファイルが見つかりません: %s\n以下のパスを試行しました:\n", filePath)
+	errMsg := fmt.Sprintf("ファイルの内容を読み込めませんでした: %s\n以下のパスを試行しました:\n", filePath)
 	for _, path := range attemptedPaths {
 		errMsg += fmt.Sprintf("- %s\n", path)
 	}
-	errMsg += "\n--repo オプションでリポジトリのパスを指定すると、ファイル内容を表示できます。"
 
 	return nil, fmt.Errorf(errMsg)
 }
