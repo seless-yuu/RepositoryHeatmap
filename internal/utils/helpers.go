@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -113,4 +114,14 @@ func PrintProgressBar(current, total int, prefix string) {
 	if current == total {
 		fmt.Println()
 	}
+}
+
+// GetNumCPUs はシステムで利用可能なCPUコア数を返す
+// 最低1、最大は物理コア数
+func GetNumCPUs() int {
+	numCPU := runtime.NumCPU()
+	if numCPU < 1 {
+		return 1
+	}
+	return numCPU
 }

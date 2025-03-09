@@ -14,25 +14,35 @@ import (
 
 // Visualizer はヒートマップの可視化を担当する構造体
 type Visualizer struct {
-	outputDir  string
-	outputType string
-	stats      *models.RepositoryStats
-	repoPath   string // リポジトリのルートパス
+	outputDir      string
+	outputType     string
+	stats          *models.RepositoryStats
+	repoPath       string // リポジトリのルートパス
+	maxFilesToShow int    // 表示する最大ファイル数
 }
 
 // NewVisualizer は新しいVisualizerインスタンスを作成する
 func NewVisualizer(outputDir, outputType string, stats *models.RepositoryStats) *Visualizer {
 	return &Visualizer{
-		outputDir:  outputDir,
-		outputType: strings.ToLower(outputType),
-		stats:      stats,
-		repoPath:   "", // デフォルトは空文字
+		outputDir:      outputDir,
+		outputType:     strings.ToLower(outputType),
+		stats:          stats,
+		repoPath:       "",  // デフォルトは空文字
+		maxFilesToShow: 100, // デフォルトは100ファイル
 	}
 }
 
 // SetRepoPath はリポジトリパスを設定する
 func (v *Visualizer) SetRepoPath(repoPath string) {
 	v.repoPath = repoPath
+}
+
+// SetMaxFilesToShow は表示する最大ファイル数を設定する
+func (v *Visualizer) SetMaxFilesToShow(maxFiles int) {
+	if maxFiles < 1 {
+		maxFiles = 1 // 最低1ファイルは表示する
+	}
+	v.maxFilesToShow = maxFiles
 }
 
 // Visualize はヒートマップデータを可視化する
@@ -94,8 +104,8 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 		fileEntryHeight  = barHeight + barGap // 1ファイルあたりの高さ
 	)
 
-	// 表示するファイル数を決定（最大で100ファイルまで）
-	maxFiles := 100
+	// 表示するファイル数を決定（設定された最大ファイル数まで）
+	maxFiles := v.maxFilesToShow
 	if len(files) > maxFiles {
 		files = files[:maxFiles]
 	}
