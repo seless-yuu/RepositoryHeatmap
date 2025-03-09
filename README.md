@@ -14,12 +14,6 @@ A tool for visualizing the frequency of changes in Git repositories. It visualiz
 - Filtering by file pattern and file type
 - Standard command line options (supporting both short and long formats)
 
-## Recent Changes
-
-- Improved command line processing: Implemented POSIX-compliant option processing using the pflag library
-- Fixed the behavior of short options such as `-h` and `--help`
-- Improved help display for subcommands (analyze, visualize)
-
 ## Installation
 
 ### Download Binary
