@@ -1,144 +1,166 @@
 # Repository Heatmap
 
-Gitリポジトリの変更頻度を可視化するヒートマップ生成ツールです。ファイルごとの変更頻度や行単位での変更頻度をSVGヒートマップとして可視化します。
+A tool for visualizing the frequency of changes in Git repositories. It visualizes the frequency of changes for each file and line-by-line changes as SVG heatmaps.
 
-## 機能
+## Features
 
-- Gitリポジトリのコミット履歴解析
-- ファイルごとの変更頻度の集計
-- 行単位での変更頻度の分析
-- ヒートマップデータのJSON形式での出力
-- SVG形式でのリポジトリヒートマップと個別ファイルヒートマップの生成
-- ファイルパターンとファイル種別によるフィルタリング機能
+- Analysis of Git repository commit history
+- Aggregation of change frequency by file
+- Analysis of change frequency by line
+- Output of heatmap data in JSON format
+- Generation of repository-wide and individual file heatmaps in SVG format
+- Filtering by file pattern and file type
+- Standard command line options (supporting both short and long formats)
 
-## インストール
+## Recent Changes
 
-### バイナリのダウンロード
+- Improved command line processing: Implemented POSIX-compliant option processing using the pflag library
+- Fixed the behavior of short options such as `-h` and `--help`
+- Improved help display for subcommands (analyze, visualize)
 
-[リリースページ](https://github.com/your-username/repositoryheatmap/releases)から最新のバイナリをダウンロードできます。
+## Installation
 
-### ソースからビルド
+### Download Binary
+
+You can download the latest binary from the [releases page](https://github.com/your-username/repositoryheatmap/releases).
+
+### Build from Source
 
 ```bash
-# リポジトリのクローン
+# Clone the repository
 git clone https://github.com/your-username/repositoryheatmap.git
 cd repositoryheatmap
 
-# 依存関係のインストール
+# Install dependencies
 go mod download
 
-# ビルド
+# Build
 go build -o repository-heatmap ./cmd/repository-heatmap
 ```
 
-## 使い方
+## Usage
 
-コマンドは2つのサブコマンドに分かれています：`analyze`（解析）と`visualize`（可視化）です。
+The command is divided into two subcommands: `analyze` and `visualize`.
 
-### 解析コマンド
+### Analyze Command
 
 ```bash
-# ローカルリポジトリの解析（長いオプション名）
+# Analyze a local repository (long option names)
 ./repository-heatmap analyze --repo=/path/to/your/repo --output=./results
 
-# ローカルリポジトリの解析（短いオプション名）
+# Analyze a local repository (short option names)
 ./repository-heatmap analyze -r /path/to/your/repo -o ./results
 
-# リモートリポジトリの解析
+# Analyze a remote repository
 ./repository-heatmap analyze --repo=https://github.com/username/repo.git --output=./results
 ./repository-heatmap analyze -r https://github.com/username/repo.git -o ./results
 
-# 特定のファイル種別のみを解析（例：Goファイル）
+# Analyze only specific file types (e.g., Go files)
 ./repository-heatmap analyze --repo=/path/to/your/repo --file-type=go --output=./results
 ./repository-heatmap analyze -r /path/to/your/repo -t go -o ./results
 
-# 特定のファイルパターンのみを解析
+# Analyze only specific file patterns
 ./repository-heatmap analyze --repo=/path/to/your/repo --file-pattern="*.go" --output=./results
 ./repository-heatmap analyze -r /path/to/your/repo -p "*.go" -o ./results
 
-# 日付でフィルタリング
+# Filter by date
 ./repository-heatmap analyze --repo=/path/to/your/repo --since=2023-01-01 --output=./results
 ./repository-heatmap analyze -r /path/to/your/repo --since=2023-01-01 -o ./results
 
-# 並列ワーカー数の指定（マルチスレッド解析）
+# Specify the number of parallel workers (multi-threaded analysis)
 ./repository-heatmap analyze --repo=/path/to/your/repo --workers=4 --output=./results
 ./repository-heatmap analyze -r /path/to/your/repo -w 4 -o ./results
+
+# Display help
+./repository-heatmap analyze --help
+./repository-heatmap analyze -h
 ```
 
-### 可視化コマンド
+### Visualize Command
 
 ```bash
-# 解析済みデータの可視化（SVG形式）
+# Visualize analyzed data (SVG format)
 ./repository-heatmap visualize --output=./results
 ./repository-heatmap visualize -o ./results
 
-# リポジトリパスを指定して個別ファイルの内容も表示
+# Specify repository path to also display file contents
 ./repository-heatmap visualize --output=./results --repo=/path/to/your/repo
 ./repository-heatmap visualize -o ./results -r /path/to/your/repo
 
-# 表示するファイル数を指定
+# Specify the number of files to display
 ./repository-heatmap visualize --output=./results --max-files=200 --repo=/path/to/your/repo
 ./repository-heatmap visualize -o ./results -m 200 -r /path/to/your/repo
 
-# 入力ファイルを明示的に指定
+# Explicitly specify the input file
 ./repository-heatmap visualize --input=./results/repo-heatmap.json --output=./results
 ./repository-heatmap visualize -i ./results/repo-heatmap.json -o ./results
+
+# Display help
+./repository-heatmap visualize --help
+./repository-heatmap visualize -h
 ```
 
-### analyzeコマンドのオプション
+### Analyze Command Options
 
-| オプション | 短いオプション | 説明 | デフォルト値 |
+| Option | Short Option | Description | Default Value |
 |------------|----------------|------|------------|
-| `--repo` | `-r` | 解析するGitリポジトリのパスまたはURL (必須) | - |
-| `--output` | `-o` | 出力ディレクトリ | `output` |
-| `--file-type` | `-t` | 解析対象のファイル種別（例：go, js, py） | - |
-| `--file-pattern` | `-p` | 解析対象のファイルパターン（例：*.go） | - |
-| `--since` | - | 指定日付以降のコミットのみを解析 (YYYY-MM-DD形式) | - |
-| `--workers` | `-w` | 並列処理に使用するワーカー数（0はCPU数に自動設定） | `0` |
-| `--skip-clone` | `-s` | リポジトリが既にクローンされている場合はスキップ | `false` |
-| `--debug` | `-d` | デバッグログをファイルに出力 | `false` |
-| `--help` | `-h` | ヘルプを表示 | `false` |
+| `--repo` | `-r` | Path or URL of the Git repository to analyze (required) | - |
+| `--output` | `-o` | Output directory | `output` |
+| `--file-type` | `-t` | File type to analyze (e.g., go, js, py) | - |
+| `--file-pattern` | `-p` | File pattern to analyze (e.g., *.go) | - |
+| `--since` | - | Analyze only commits after the specified date (YYYY-MM-DD format) | - |
+| `--workers` | `-w` | Number of workers for parallel processing (0 automatically sets based on CPU count) | `0` |
+| `--skip-clone` | `-s` | Skip cloning if the repository is already cloned | `false` |
+| `--debug` | `-d` | Output debug logs to a file | `false` |
+| `--help` | `-h` | Display help | `false` |
 
-### visualizeコマンドのオプション
+### Visualize Command Options
 
-| オプション | 短いオプション | 説明 | デフォルト値 |
+| Option | Short Option | Description | Default Value |
 |------------|----------------|------|------------|
-| `--output` | `-o` | ヒートマップ出力ディレクトリ | `output` |
-| `--format` | `-f` | 出力形式 (svgまたはwebp) | `svg` |
-| `--repo` | `-r` | ファイル内容表示のためのリポジトリパス（個別ファイルSVGに必要） | - |
-| `--max-files` | `-m` | ヒートマップに表示する最大ファイル数 | `100` |
-| `--input` | `-i` | 入力JSONファイルのパス（指定しない場合は自動検出） | - |
-| `--debug` | `-d` | デバッグログをファイルに出力 | `false` |
-| `--help` | `-h` | ヘルプを表示 | `false` |
+| `--output` | `-o` | Heatmap output directory | `output` |
+| `--format` | `-f` | Output format (svg or webp) | `svg` |
+| `--repo` | `-r` | Repository path for displaying file contents (needed for individual file SVGs) | - |
+| `--max-files` | `-m` | Maximum number of files to display in the heatmap | `100` |
+| `--input` | `-i` | Path to input JSON file (automatically detected if not specified) | - |
+| `--debug` | `-d` | Output debug logs to a file | `false` |
+| `--help` | `-h` | Display help | `false` |
 
-### グローバルオプション
+### Global Options
 
-以下のオプションはサブコマンドなしで使用できます：
+The following options can be used without a subcommand:
 
-| オプション | 短いオプション | 説明 |
+| Option | Short Option | Description |
 |------------|----------------|------|
-| `--version` | `-v` | バージョン情報を表示 |
-| `--help` | `-h` | ヘルプを表示 |
+| `--version` | `-v` | Display version information |
+| `--help` | `-h` | Display help |
 
-## 出力
+## Output
 
-- `<リポジトリ名>-heatmap.json`: ファイルごとの変更頻度データ
-- `<リポジトリ名>-repository-heatmap.svg`: リポジトリ全体のSVGヒートマップ
-- `file-heatmaps/`: 各ファイルの変更頻度ヒートマップ（SVG形式）
+- `<repository_name>-heatmap.json`: Change frequency data by file
+- `<repository_name>-repository-heatmap.svg`: SVG heatmap of the entire repository
+- `file-heatmaps/`: Change frequency heatmaps for each file (SVG format)
 
-## 特徴
+## Features
 
-- **SVGリンク機能**: リポジトリ全体のヒートマップから個別ファイルのヒートマップへのリンク
-- **行単位の色分け**: 変更頻度に応じた行ごとの色分け表示
-- **フィルタリング機能**: ファイル種別、パターン、日付によるフィルタリング
-- **マルチスレッド処理**: 大規模リポジトリの高速解析
-- **標準CLI慣習**: 長いオプション（`--option`）と短いオプション（`-o`）をサポート
+- **SVG Link Functionality**: Links from the repository-wide heatmap to individual file heatmaps
+- **Line-by-Line Coloring**: Display of line-by-line coloring based on change frequency
+- **Filtering Functionality**: Filtering by file type, pattern, and date
+- **Multi-threaded Processing**: Fast analysis of large repositories
+- **Standard CLI Conventions**: Full support for both long options (`--option`) and short options (`-o`)
 
-## 依存関係
+## Command Line Processing Improvements
 
-- [go-git](https://github.com/go-git/go-git): Gitリポジトリの操作
-- [pflag](https://github.com/spf13/pflag): POSIX準拠のコマンドラインフラグ処理
+- **pflag Library**: Implemented POSIX-compliant command line flag processing
+- **Intuitive Interface**: Both `--help` and `-h` can be used to display help for all commands and subcommands
+- **Standardized Option Processing**: Support for both long and short forms for all options
+- **Clear Help Messages**: Detailed display of usage and examples for each command
 
-## ライセンス
+## Dependencies
+
+- [go-git](https://github.com/go-git/go-git): Git repository operations
+- [pflag](https://github.com/spf13/pflag): POSIX-compliant command line flag processing
+
+## License
 
 MIT License
