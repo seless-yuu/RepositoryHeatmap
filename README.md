@@ -18,7 +18,7 @@ A tool for visualizing the frequency of changes in Git repositories. It visualiz
 
 ### Download Binary
 
-You can download the latest binary for your platform from the [releases page](https://github.com/your-username/repositoryheatmap/releases):
+You can download the latest binary for your platform from the [releases page](https://github.com/repositoryheatmap/releases):
 
 - Windows AMD64: `repository-heatmap-windows-amd64.exe`
 - macOS Apple Silicon: `repository-heatmap-darwin-arm64`
@@ -28,7 +28,7 @@ You can download the latest binary for your platform from the [releases page](ht
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/repositoryheatmap.git
+git clone https://github.com/repositoryheatmap/repositoryheatmap.git
 cd repositoryheatmap
 
 # Install dependencies
@@ -136,7 +136,6 @@ The command is divided into two subcommands: `analyze` and `visualize`.
 | `--since` | - | Analyze only commits after the specified date (YYYY-MM-DD format) | - |
 | `--workers` | `-w` | Number of workers for parallel processing (0 automatically sets based on CPU count) | `0` |
 | `--skip-clone` | `-s` | Skip cloning if the repository is already cloned | `false` |
-| `--debug` | `-d` | Output debug logs to a file | `false` |
 | `--help` | `-h` | Display help | `false` |
 
 ### Visualize Command Options
@@ -144,11 +143,9 @@ The command is divided into two subcommands: `analyze` and `visualize`.
 | Option | Short Option | Description | Default Value |
 |------------|----------------|------|------------|
 | `--output` | `-o` | Heatmap output directory | `output` |
-| `--format` | `-f` | Output format (svg or webp) | `svg` |
 | `--repo` | `-r` | Repository path for displaying file contents (needed for individual file SVGs) | - |
 | `--max-files` | `-m` | Maximum number of files to display in the heatmap | `100` |
 | `--input` | `-i` | Path to input JSON file (automatically detected if not specified) | - |
-| `--debug` | `-d` | Output debug logs to a file | `false` |
 | `--help` | `-h` | Display help | `false` |
 
 ### Global Options
