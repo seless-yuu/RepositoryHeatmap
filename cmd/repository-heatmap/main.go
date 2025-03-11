@@ -27,7 +27,7 @@ var (
 	sinceDate   string
 	workers     int
 	maxFiles    int
-	version     = "0.1.0" // アプリケーションバージョン
+	version     = "0.1.0" // Application version
 	logFile     *os.File
 	logger      *log.Logger
 	inputFile   string
@@ -37,60 +37,60 @@ var (
 
 // analyzeコマンド用のフラグ設定
 func setupAnalyzeFlags(analyzeCmd *pflag.FlagSet) {
-	analyzeCmd.StringVarP(&repoPath, "repo", "r", "", "解析するGitリポジトリのパスまたはURL")
-	analyzeCmd.StringVarP(&outputDir, "output", "o", "output", "解析結果の出力ディレクトリ")
-	analyzeCmd.BoolVarP(&skipClone, "skip-clone", "s", false, "リポジトリが既にクローンされている場合はスキップ")
-	analyzeCmd.StringVar(&sinceDate, "since", "", "指定日付以降のコミットのみを解析 (YYYY-MM-DD形式)")
-	analyzeCmd.IntVarP(&workers, "workers", "w", 0, "並列ワーカー数（0: 自動、CPU数に基づく）")
-	analyzeCmd.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
-	analyzeCmd.BoolVarP(&debugLog, "debug", "d", false, "デバッグログをファイルに出力")
-	analyzeCmd.StringVarP(&filePattern, "file-pattern", "p", "", "解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）")
-	analyzeCmd.StringVarP(&fileType, "file-type", "t", "", "解析対象のファイル種別（拡張子のみ、例: 'go'）")
+	analyzeCmd.StringVarP(&repoPath, "repo", "r", "", "Git repository path or URL to analyze")
+	analyzeCmd.StringVarP(&outputDir, "output", "o", "output", "Output directory for analysis results")
+	analyzeCmd.BoolVarP(&skipClone, "skip-clone", "s", false, "Skip cloning if repository already exists")
+	analyzeCmd.StringVar(&sinceDate, "since", "", "Analyze commits only after this date (YYYY-MM-DD format)")
+	analyzeCmd.IntVarP(&workers, "workers", "w", 0, "Number of parallel workers (0: automatic, based on CPU count)")
+	analyzeCmd.BoolVarP(&showHelp, "help", "h", false, "Show help")
+	analyzeCmd.BoolVarP(&debugLog, "debug", "d", false, "Output debug logs to file")
+	analyzeCmd.StringVarP(&filePattern, "file-pattern", "p", "", "File pattern to analyze (wildcard support, e.g., '*.go')")
+	analyzeCmd.StringVarP(&fileType, "file-type", "t", "", "File type to analyze (extension only, e.g., 'go')")
 }
 
 // visualizeコマンド用のフラグ設定
 func setupVisualizeFlags(visualizeCmd *pflag.FlagSet) {
-	visualizeCmd.StringVarP(&outputDir, "output", "o", "output", "ヒートマップ出力ディレクトリ")
-	visualizeCmd.StringVarP(&outputType, "format", "f", "svg", "出力形式 (svg または webp)")
-	visualizeCmd.StringVarP(&repoPath, "repo", "r", "", "ファイル内容表示のためのリポジトリパス（必須ではない）")
-	visualizeCmd.IntVarP(&maxFiles, "max-files", "m", 100, "ヒートマップに表示する最大ファイル数")
-	visualizeCmd.BoolVarP(&debugLog, "debug", "d", false, "デバッグログをファイルに出力")
-	visualizeCmd.StringVarP(&inputFile, "input", "i", "", "入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）")
-	visualizeCmd.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
+	visualizeCmd.StringVarP(&outputDir, "output", "o", "output", "Output directory for heatmap")
+	visualizeCmd.StringVarP(&outputType, "format", "f", "svg", "Output format (svg or webp)")
+	visualizeCmd.StringVarP(&repoPath, "repo", "r", "", "Repository path for file content display (not required)")
+	visualizeCmd.IntVarP(&maxFiles, "max-files", "m", 100, "Maximum number of files to display in the heatmap")
+	visualizeCmd.BoolVarP(&debugLog, "debug", "d", false, "Output debug logs to file")
+	visualizeCmd.StringVarP(&inputFile, "input", "i", "", "Input JSON file path (if not specified, automatically selected from output directory)")
+	visualizeCmd.BoolVarP(&showHelp, "help", "h", false, "Show help")
 }
 
 // analyzeコマンドのヘルプメッセージ
 func showAnalyzeHelp(analyzeCmd *pflag.FlagSet) {
-	fmt.Println("Repository Heatmap - リポジトリ解析コマンド")
+	fmt.Println("Repository Heatmap - Repository Analysis Command")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s analyze [options]\n\n", os.Args[0])
-	fmt.Println("Gitリポジトリを解析し、ヒートマップデータを生成します。")
+	fmt.Println("Analyzes a Git repository and generates heatmap data.")
 	fmt.Println()
 	fmt.Println("Options:")
 
 	// pflagのデフォルトでは短いオプションがデフォルトのPrintDefaultsで表示されないため、
 	// カスタマイズしたヘルプ表示を使用
 	fmt.Printf("  -d, --debug\n")
-	fmt.Printf("        デバッグログをファイルに出力\n")
+	fmt.Printf("        Output debug logs to file\n")
 	fmt.Printf("  -p, --file-pattern string\n")
-	fmt.Printf("        解析対象のファイルパターン（ワイルドカード対応、例: '*.go'）\n")
+	fmt.Printf("        File pattern to analyze (wildcard support, e.g., '*.go')\n")
 	fmt.Printf("  -t, --file-type string\n")
-	fmt.Printf("        解析対象のファイル種別（拡張子のみ、例: 'go'）\n")
+	fmt.Printf("        File type to analyze (extension only, e.g., 'go')\n")
 	fmt.Printf("  -h, --help\n")
-	fmt.Printf("        ヘルプを表示\n")
+	fmt.Printf("        Show help\n")
 	fmt.Printf("  -o, --output string (default \"output\")\n")
-	fmt.Printf("        解析結果の出力ディレクトリ\n")
+	fmt.Printf("        Output directory for analysis results\n")
 	fmt.Printf("  -r, --repo string\n")
-	fmt.Printf("        解析するGitリポジトリのパスまたはURL\n")
+	fmt.Printf("        Git repository path or URL to analyze\n")
 	fmt.Printf("  --since string\n")
-	fmt.Printf("        指定日付以降のコミットのみを解析 (YYYY-MM-DD形式)\n")
+	fmt.Printf("        Analyze commits only after this date (YYYY-MM-DD format)\n")
 	fmt.Printf("  -s, --skip-clone\n")
-	fmt.Printf("        リポジトリが既にクローンされている場合はスキップ\n")
+	fmt.Printf("        Skip cloning if repository already exists\n")
 	fmt.Printf("  -w, --workers int\n")
-	fmt.Printf("        並列ワーカー数（0: 自動、CPU数に基づく）\n")
+	fmt.Printf("        Number of parallel workers (0: automatic, based on CPU count)\n")
 
 	fmt.Println()
-	fmt.Println("例:")
+	fmt.Println("Examples:")
 	fmt.Printf("  %s analyze --repo=./myrepo --output=./results\n", os.Args[0])
 	fmt.Printf("  %s analyze -r ./myrepo -o ./results\n", os.Args[0])
 	fmt.Printf("  %s analyze --repo=https://github.com/username/repo.git\n", os.Args[0])
@@ -105,36 +105,36 @@ func showAnalyzeHelp(analyzeCmd *pflag.FlagSet) {
 
 // visualizeコマンドのヘルプメッセージ
 func showVisualizeHelp(visualizeCmd *pflag.FlagSet) {
-	fmt.Println("Repository Heatmap - ヒートマップ可視化コマンド")
+	fmt.Println("Repository Heatmap - Heatmap Visualization Command")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s visualize [options]\n\n", os.Args[0])
-	fmt.Println("リポジトリ解析データからヒートマップを生成します。")
+	fmt.Println("Generates a heatmap from repository analysis data.")
 	fmt.Println()
 	fmt.Println("Options:")
 
 	// pflagのデフォルトでは短いオプションがデフォルトのPrintDefaultsで表示されないため、
 	// カスタマイズしたヘルプ表示を使用
 	fmt.Printf("  -d, --debug\n")
-	fmt.Printf("        デバッグログをファイルに出力\n")
+	fmt.Printf("        Output debug logs to file\n")
 	fmt.Printf("  -f, --format string (default \"svg\")\n")
-	fmt.Printf("        出力形式 (svg または webp)\n")
+	fmt.Printf("        Output format (svg or webp)\n")
 	fmt.Printf("  -h, --help\n")
-	fmt.Printf("        ヘルプを表示\n")
+	fmt.Printf("        Show help\n")
 	fmt.Printf("  -i, --input string\n")
-	fmt.Printf("        入力JSONファイルのパス（指定しない場合は出力ディレクトリから自動選択）\n")
+	fmt.Printf("        Input JSON file path (if not specified, automatically selected from output directory)\n")
 	fmt.Printf("  -m, --max-files int (default 100)\n")
-	fmt.Printf("        ヒートマップに表示する最大ファイル数\n")
+	fmt.Printf("        Maximum number of files to display in the heatmap\n")
 	fmt.Printf("  -o, --output string (default \"output\")\n")
-	fmt.Printf("        ヒートマップ出力ディレクトリ\n")
+	fmt.Printf("        Output directory for heatmap\n")
 	fmt.Printf("  -r, --repo string\n")
-	fmt.Printf("        ファイル内容表示のためのリポジトリパス（必須ではない）\n")
+	fmt.Printf("        Repository path for file content display (not required)\n")
 
 	fmt.Println()
-	fmt.Println("出力形式:")
-	fmt.Println("  svg  - SVG形式のベクターグラフィックス（リポジトリ全体と個別ファイルのヒートマップを生成）")
-	fmt.Println("  webp - WebP形式の画像（実験的機能）")
+	fmt.Println("Output Formats:")
+	fmt.Println("  svg  - SVG vector graphics (generates heatmaps for the entire repository and individual files)")
+	fmt.Println("  webp - WebP image format (experimental feature)")
 	fmt.Println()
-	fmt.Println("例:")
+	fmt.Println("Examples:")
 	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --output=./results\n", os.Args[0])
 	fmt.Printf("  %s visualize -i ./results/repo-heatmap.json -o ./results\n", os.Args[0])
 	fmt.Printf("  %s visualize --input=./results/repo-heatmap.json --format=svg\n", os.Args[0])
@@ -149,16 +149,16 @@ func showVisualizeHelp(visualizeCmd *pflag.FlagSet) {
 
 // 全体のヘルプメッセージ
 func showMainHelp() {
-	fmt.Println("Repository Heatmap - Gitリポジトリの変更頻度解析ツール")
+	fmt.Println("Repository Heatmap - Change Frequency Analysis Tool for Git Repositories")
 	fmt.Println("=========================================================")
 	fmt.Printf("Usage: %s <command> [options]\n\n", os.Args[0])
 	fmt.Println("Commands:")
-	fmt.Println("  analyze    リポジトリを解析しJSONデータを生成")
-	fmt.Println("  visualize  JSONデータからヒートマップを生成")
+	fmt.Println("  analyze    Analyze repository and generate JSON data")
+	fmt.Println("  visualize  Generate heatmap from JSON data")
 	fmt.Println()
-	fmt.Println("バージョン情報:")
+	fmt.Println("Version Information:")
 	fmt.Printf("  %s --version\n", os.Args[0])
-	fmt.Println("\nオプションを確認するには:")
+	fmt.Println("\nTo check options:")
 	fmt.Printf("  %s analyze --help\n", os.Args[0])
 	fmt.Printf("  %s visualize --help\n", os.Args[0])
 }
@@ -199,7 +199,7 @@ func analyzeCommand(args []string) {
 
 	// フラグを解析
 	if err := analyzeCmd.Parse(args); err != nil {
-		fmt.Printf("フラグの解析エラー: %v\n", err)
+		fmt.Printf("Flag parsing error: %v\n", err)
 		analyzeCmd.Usage()
 		os.Exit(1)
 	}
@@ -214,51 +214,51 @@ func analyzeCommand(args []string) {
 	setupDebugLog()
 
 	// コマンドを表示
-	logDebug("実行コマンド: %s analyze", os.Args[0])
+	logDebug("Command executed: %s analyze", os.Args[0])
 
 	// 日付パラメータのパース
 	var since *time.Time
 	if sinceDate != "" {
 		parsedTime, err := time.Parse("2006-01-02", sinceDate)
 		if err != nil {
-			logDebug("エラー: 日付形式が正しくありません。YYYY-MM-DD形式で指定してください: %v", err)
+			logDebug("Error: Date format is incorrect. Please specify in YYYY-MM-DD format: %v", err)
 			os.Exit(1)
 		}
 		since = &parsedTime
-		logDebug("指定された日付以降のコミットのみを解析します: %s", parsedTime.Format("2006-01-02"))
+		logDebug("Analyzing commits only after specified date: %s", parsedTime.Format("2006-01-02"))
 	}
 
 	// 並列ワーカー数の設定
 	if workers < 0 {
-		logDebug("エラー: ワーカー数は0以上を指定してください")
+		logDebug("Error: Worker count must be 0 or greater")
 		os.Exit(1)
 	} else if workers == 0 {
 		workers = utils.GetNumCPUs()
-		logDebug("利用可能なCPUコア数に基づいてワーカー数を設定: %d", workers)
+		logDebug("Setting worker count based on available CPU cores: %d", workers)
 	} else {
-		logDebug("ワーカー数: %d", workers)
+		logDebug("Worker count: %d", workers)
 	}
 
 	// 出力ディレクトリ作成
 	if err := utils.EnsureDirectoryExists(outputDir); err != nil {
-		logDebug("出力ディレクトリの作成に失敗しました: %v", err)
+		logDebug("Failed to create output directory: %v", err)
 		os.Exit(1)
 	}
 
 	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
-		logDebug("出力パスの解決に失敗しました: %v", err)
+		logDebug("Failed to resolve output path: %v", err)
 		os.Exit(1)
 	}
 
-	logDebug("リポジトリヒートマップ解析を開始します...")
-	logDebug("リポジトリ: %s", repoPath)
-	logDebug("出力ディレクトリ: %s", absOutputDir)
+	logDebug("Starting repository heatmap analysis...")
+	logDebug("Repository: %s", repoPath)
+	logDebug("Output directory: %s", absOutputDir)
 
 	// リポジトリの解析
 	analyzer, err := git.NewAnalyzer(repoPath)
 	if err != nil {
-		logDebug("リポジトリアナライザの作成に失敗しました: %v", err)
+		logDebug("Failed to create repository analyzer: %v", err)
 		os.Exit(1)
 	}
 
@@ -272,54 +272,54 @@ func analyzeCommand(args []string) {
 
 	// ファイルフィルタを設定
 	if filePattern != "" {
-		logDebug("ファイルパターンでフィルタリング: %s", filePattern)
+		logDebug("Filtering by file pattern: %s", filePattern)
 		analyzer.SetFilePattern(filePattern)
 	}
 
 	if fileType != "" {
-		logDebug("ファイル種別でフィルタリング: %s", fileType)
+		logDebug("Filtering by file type: %s", fileType)
 		analyzer.SetFileType(fileType)
 	}
 
 	// リポジトリのオープンまたはクローン
 	if utils.IsLocalRepository(repoPath) {
-		logDebug("ローカルリポジトリを開きます: %s", repoPath)
+		logDebug("Opening local repository: %s", repoPath)
 		if err := analyzer.Open(); err != nil {
-			logDebug("リポジトリを開けませんでした: %v", err)
+			logDebug("Failed to open repository: %v", err)
 			os.Exit(1)
 		}
 	} else if utils.IsValidGitURL(repoPath) {
 		// クローン用の一時ディレクトリを作成
 		tempDir := filepath.Join(outputDir, "repo-clone")
 		if err := utils.EnsureDirectoryExists(tempDir); err != nil {
-			logDebug("クローン用ディレクトリの作成に失敗しました: %v", err)
+			logDebug("Failed to create directory for cloning: %v", err)
 			os.Exit(1)
 		}
 
-		logDebug("リポジトリをクローンします: %s -> %s", repoPath, tempDir)
+		logDebug("Cloning repository: %s -> %s", repoPath, tempDir)
 		if err := analyzer.Clone(repoPath); err != nil {
-			logDebug("リポジトリのクローンに失敗しました: %v", err)
+			logDebug("Failed to clone repository: %v", err)
 			os.Exit(1)
 		}
 	} else {
-		logDebug("無効なリポジトリパスまたはURL: %s", repoPath)
+		logDebug("Invalid repository path or URL: %s", repoPath)
 		os.Exit(1)
 	}
 
 	// リポジトリの解析（マルチスレッド対応）
-	logDebug("コミット履歴を解析中...")
+	logDebug("Analyzing commit history...")
 	stats, err := analyzer.Analyze()
 	if err != nil {
-		logDebug("リポジトリの解析に失敗しました: %v", err)
+		logDebug("Failed to analyze repository: %v", err)
 		os.Exit(1)
 	}
 
 	// 行単位での変更追跡
-	logDebug("行単位の変更を追跡中...")
+	logDebug("Tracking line-level changes...")
 	lineTracker := git.NewLineTracker(analyzer)
 	lineTracker.SetWorkerCount(workers) // 行変更追跡も並列化
 	if err := lineTracker.TrackLineChanges(stats); err != nil {
-		logDebug("行単位の変更追跡に失敗しました: %v", err)
+		logDebug("Failed to track line-level changes: %v", err)
 		os.Exit(1)
 	}
 	lineTracker.CalculateLineHeatLevels(stats)
@@ -328,12 +328,12 @@ func analyzeCommand(args []string) {
 	repoName := stats.RepositoryName
 	jsonFilePath, err := writeJSONResult(stats, absOutputDir, repoName)
 	if err != nil {
-		logDebug("JSONファイルの書き込みに失敗しました: %v", err)
+		logDebug("Failed to write JSON file: %v", err)
 		os.Exit(1)
 	}
 
-	logDebug("ヒートマップデータをJSONに保存しました: %s", jsonFilePath)
-	logDebug("解析が完了しました")
+	logDebug("Heatmap data saved to JSON: %s", jsonFilePath)
+	logDebug("Analysis completed")
 }
 
 // visualizeCommand はJSON出力からヒートマップを生成する
@@ -359,7 +359,7 @@ func visualizeCommand(args []string) {
 
 	// フラグを解析
 	if err := visualizeCmd.Parse(args); err != nil {
-		fmt.Printf("フラグの解析エラー: %v\n", err)
+		fmt.Printf("Flag parsing error: %v\n", err)
 		visualizeCmd.Usage()
 		os.Exit(1)
 	}
@@ -374,26 +374,26 @@ func visualizeCommand(args []string) {
 	setupDebugLog()
 
 	// コマンドを表示
-	logDebug("実行コマンド: %s visualize", os.Args[0])
+	logDebug("Command executed: %s visualize", os.Args[0])
 
 	// 出力ディレクトリのチェック
 	if outputDir == "" {
-		logDebug("エラー: 出力ディレクトリを指定してください（--output または -o オプション）\n")
+		logDebug("Error: Please specify an output directory (--output or -o option)\n")
 		visualizeCmd.Usage()
 		os.Exit(1)
 	}
 
 	// 最大ファイル数のチェック
 	if maxFiles < 1 {
-		logDebug("警告: 最大ファイル数は1以上である必要があります。1に設定します")
+		logDebug("Warning: Maximum file count must be greater than or equal to 1. Setting to 1")
 		maxFiles = 1
 	} else {
-		logDebug("表示する最大ファイル数: %d", maxFiles)
+		logDebug("Maximum number of files to display: %d", maxFiles)
 	}
 
 	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
-		logDebug("出力パスの解決に失敗しました: %v", err)
+		logDebug("Failed to resolve output path: %v", err)
 		os.Exit(1)
 	}
 
@@ -404,36 +404,36 @@ func visualizeCommand(args []string) {
 		// 1. コマンドラインオプションで指定されたJSONファイル
 		absInputFile, err := filepath.Abs(inputFile)
 		if err != nil {
-			logDebug("入力ファイルパスの解決に失敗しました: %v", err)
+			logDebug("Failed to resolve input file path: %v", err)
 			os.Exit(1)
 		}
 
 		// ファイルの存在確認
 		if _, err := os.Stat(absInputFile); err != nil {
-			logDebug("指定された入力ファイルが見つかりません: %s", absInputFile)
+			logDebug("Specified input file not found: %s", absInputFile)
 			os.Exit(1)
 		}
 
 		jsonFilePath = absInputFile
-		logDebug("指定された入力JSONファイルを使用します: %s", jsonFilePath)
+		logDebug("Using specified input JSON file: %s", jsonFilePath)
 	} else {
 		// 2. 最新のJSONファイルを検索
 		latestFile, err := findLatestJSONFile(outputDir)
 		if err != nil {
-			logDebug("JSONファイルの検索に失敗しました: %v", err)
-			logDebug("エラー: 入力JSONファイルが見つかりませんでした。--input (-i) オプションで指定するか、出力ディレクトリに有効なJSONファイルを配置してください")
+			logDebug("Failed to search JSON file: %v", err)
+			logDebug("Error: Input JSON file not found. Please specify with --input (-i) option or place a valid JSON file in the output directory")
 			os.Exit(1)
 		}
 		jsonFilePath = latestFile
-		logDebug("最新のJSONファイルを使用します: %s", jsonFilePath)
+		logDebug("Using latest JSON file: %s", jsonFilePath)
 	}
 
-	logDebug("JSONファイルを読み込みます: %s", jsonFilePath)
+	logDebug("Reading JSON file: %s", jsonFilePath)
 
 	// JSONファイルからデータを読み込む
 	stats, err := readJSONFile(jsonFilePath)
 	if err != nil {
-		logDebug("JSONファイルの読み込みに失敗しました: %v", err)
+		logDebug("Failed to read JSON file: %v", err)
 		os.Exit(1)
 	}
 
@@ -448,28 +448,28 @@ func visualizeCommand(args []string) {
 	}
 	// フィルタリングされたファイルリストで置き換え
 	stats.Files = filteredFiles
-	logDebug("ファイル数: %d (フィルタリング前) -> %d (フィルタリング後)", originalFileCount, len(filteredFiles))
+	logDebug("File count: %d (before filtering) -> %d (after filtering)", originalFileCount, len(filteredFiles))
 
 	// リポジトリパスが指定されていれば、その情報を使用
 	var localRepoPath string
 	if repoPath != "" {
 		if !utils.IsLocalRepository(repoPath) {
-			logDebug("警告: 指定されたリポジトリパスが見つかりません。ファイル内容表示が無効になります")
+			logDebug("Warning: Specified repository path not found. File content display will be disabled")
 		} else {
 			absRepoPath, err := filepath.Abs(repoPath)
 			if err != nil {
-				logDebug("リポジトリパスの解決に失敗しました: %v", err)
+				logDebug("Failed to resolve repository path: %v", err)
 			} else {
 				localRepoPath = absRepoPath
 			}
 		}
 	}
 
-	logDebug("ヒートマップを可視化中...")
-	logDebug("出力ディレクトリ: %s", absOutputDir)
+	logDebug("Visualizing heatmap...")
+	logDebug("Output directory: %s", absOutputDir)
 
 	// 通常の静的可視化
-	logDebug("出力形式: %s", outputType)
+	logDebug("Output format: %s", outputType)
 
 	// ヒートマップの可視化
 	visualizer := heatmap.NewVisualizer(absOutputDir, outputType, stats, maxFiles, inputFile)
@@ -480,12 +480,12 @@ func visualizeCommand(args []string) {
 	}
 
 	if err := visualizer.Visualize(); err != nil {
-		logDebug("ヒートマップの可視化に失敗しました: %v", err)
+		logDebug("Failed to visualize heatmap: %v", err)
 		os.Exit(1)
 	}
 
-	logDebug("可視化が完了しました")
-	logDebug("結果は %s ディレクトリに保存されました", absOutputDir)
+	logDebug("Visualization completed")
+	logDebug("Results saved in %s directory", absOutputDir)
 }
 
 // デバッグログの設定
@@ -494,11 +494,11 @@ func setupDebugLog() {
 		var err error
 		logFile, err = os.Create("repository-heatmap-debug.log")
 		if err != nil {
-			fmt.Printf("デバッグログファイルを作成できませんでした: %v\n", err)
+			fmt.Printf("Failed to create debug log file: %v\n", err)
 		} else {
 			defer logFile.Close()
 			logger = log.New(logFile, "", log.LstdFlags)
-			logger.Println("Repository Heatmap デバッグログ開始")
+			logger.Println("Repository Heatmap debug log started")
 		}
 	}
 }
