@@ -1,0 +1,194 @@
+{
+  "tool_name": "repository-heatmap",
+  "description": "A tool for analyzing and visualizing Git repository change frequencies",
+  "version": "1.0.0",
+  "commands": {
+    "analyze": {
+      "description": "Analyze Git repository commit history and generate heatmap data",
+      "required_args": {
+        "repo": {
+          "description": "Path or URL of the Git repository to analyze",
+          "type": "string",
+          "examples": [
+            "/path/to/local/repo",
+            "https://github.com/username/repo.git"
+          ]
+        }
+      },
+      "optional_args": {
+        "output": {
+          "description": "Output directory for analysis results",
+          "type": "string",
+          "default": "output"
+        },
+        "file-type": {
+          "description": "File extension to analyze (e.g., go, js, py)",
+          "type": "string"
+        },
+        "file-pattern": {
+          "description": "Glob pattern for files to analyze",
+          "type": "string",
+          "examples": ["*.go", "src/**/*.js"]
+        },
+        "since": {
+          "description": "Analyze commits after this date",
+          "type": "string",
+          "format": "YYYY-MM-DD"
+        },
+        "workers": {
+          "description": "Number of parallel workers",
+          "type": "integer",
+          "default": 0,
+          "note": "0 means auto-detect CPU count"
+        },
+        "skip-clone": {
+          "description": "Skip cloning if repository exists",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "output_files": {
+        "heatmap_json": {
+          "path": "{output}/{repo_name}-heatmap.json",
+          "format": "json",
+          "schema": {
+            "repository_name": "string",
+            "repository_path": "string",
+            "commit_count": "integer",
+            "first_commit_at": "datetime",
+            "last_commit_at": "datetime",
+            "files": {
+              "type": "map",
+              "key": "file_path",
+              "value": {
+                "file_path": "string",
+                "change_count": "integer",
+                "heat_level": "float",
+                "last_modified": "datetime",
+                "line_changes": {
+                  "type": "map",
+                  "key": "line_number",
+                  "value": "integer"
+                },
+                "line_contents": {
+                  "type": "map",
+                  "key": "line_number",
+                  "value": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "visualize": {
+      "description": "Generate SVG heatmaps from analysis data",
+      "optional_args": {
+        "output": {
+          "description": "Output directory for heatmap files",
+          "type": "string",
+          "default": "output"
+        },
+        "repo": {
+          "description": "Repository path for displaying file contents",
+          "type": "string"
+        },
+        "max-files": {
+          "description": "Maximum number of files to display",
+          "type": "integer",
+          "default": 100
+        },
+        "input": {
+          "description": "Path to input JSON file",
+          "type": "string",
+          "note": "Auto-detected if not specified"
+        }
+      },
+      "output_files": {
+        "repository_heatmap": {
+          "path": "{output}/{repo_name}-repository-heatmap.svg",
+          "format": "svg",
+          "description": "Repository-wide heatmap showing all files"
+        },
+        "file_heatmaps": {
+          "path": "{output}/file-heatmaps/{sanitized_file_path}.svg",
+          "format": "svg",
+          "description": "Individual file heatmaps with line-by-line coloring"
+        }
+      }
+    }
+  },
+  "color_scheme": {
+    "heat_levels": [
+      {
+        "range": [0.0, 0.2],
+        "color": "#FFF5E6",
+        "description": "Very low change frequency"
+      },
+      {
+        "range": [0.2, 0.4],
+        "color": "#FFE0B2",
+        "description": "Low change frequency"
+      },
+      {
+        "range": [0.4, 0.6],
+        "color": "#FFAB66",
+        "description": "Medium change frequency"
+      },
+      {
+        "range": [0.6, 0.8],
+        "color": "#FF8533",
+        "description": "Medium-high change frequency"
+      },
+      {
+        "range": [0.8, 1.0],
+        "color": "#E65C00",
+        "description": "High change frequency"
+      }
+    ]
+  },
+  "function_calling_examples": {
+    "analyze_local_repo": {
+      "function": "run_terminal_cmd",
+      "args": {
+        "command": "./repository-heatmap analyze --repo=/path/to/repo --output=./results"
+      },
+      "expected_output": {
+        "files": [
+          "./results/repo-heatmap.json"
+        ]
+      }
+    },
+    "visualize_results": {
+      "function": "run_terminal_cmd",
+      "args": {
+        "command": "./repository-heatmap visualize --output=./results --max-files=200"
+      },
+      "expected_output": {
+        "files": [
+          "./results/repo-name-repository-heatmap.svg",
+          "./results/file-heatmaps/*.svg"
+        ]
+      }
+    }
+  },
+  "error_handling": {
+    "patterns": [
+      {
+        "error": "repository name not set",
+        "cause": "Repository path is invalid or not accessible",
+        "solution": "Check if the repository path exists and is accessible"
+      },
+      {
+        "error": "failed to create output directory",
+        "cause": "Output directory cannot be created",
+        "solution": "Check if the parent directory exists and has write permissions"
+      },
+      {
+        "error": "failed to generate repository heatmap",
+        "cause": "Error during heatmap generation",
+        "solution": "Check if the JSON data file exists and is valid"
+      }
+    ]
+  }
+} 
