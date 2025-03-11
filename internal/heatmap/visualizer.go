@@ -1,4 +1,4 @@
-﻿package heatmap
+package heatmap
 
 import (
 	"bufio"
@@ -124,6 +124,39 @@ func sortFilesByHeat(stats *models.RepositoryStats) []models.FileChangeInfo {
 	})
 
 	return files
+}
+
+// parseJSONPath parses a JSON file path and returns the directory and base name
+func parseJSONPath(jsonPath string) (string, string, error) {
+	if jsonPath == "" {
+		return "", "", fmt.Errorf("empty path")
+	}
+
+	// Check file extension
+	if !strings.HasSuffix(jsonPath, ".json") {
+		return "", "", fmt.Errorf("invalid file extension: must be .json")
+	}
+
+	// Check for multiple .json extensions
+	if strings.Count(jsonPath, ".json") > 1 {
+		return "", "", fmt.Errorf("invalid file name: multiple .json extensions")
+	}
+
+	// Split path into directory and base name
+	dir := filepath.Dir(jsonPath)
+	base := filepath.Base(jsonPath)
+
+	// Handle case where path ends with directory separator
+	if strings.HasSuffix(jsonPath, string(filepath.Separator)) {
+		return "", "", fmt.Errorf("invalid path: ends with directory separator")
+	}
+
+	// Convert empty directory to "."
+	if dir == "" {
+		dir = "."
+	}
+
+	return dir, base, nil
 }
 
 // min returns the smaller of x or y
