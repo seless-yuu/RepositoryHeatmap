@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -63,14 +64,44 @@ func (a *RepositoryAnalyzer) SetFileType(fileType string) {
 
 // Open はリポジトリを開く
 func (a *RepositoryAnalyzer) Open() error {
+	// 指定されたパスが存在することを確認
+	absPath, err := filepath.Abs(a.repoPath)
+	if err != nil {
+		return fmt.Errorf("パスの解決に失敗しました: %w", err)
+	}
+
+	// パスが存在し、ディレクトリであることを確認
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("パスが存在しません: %w", err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("指定されたパスはディレクトリではありません: %s", absPath)
+	}
+
+	// .gitディレクトリの存在を確認
+	gitDirPath := filepath.Join(absPath, ".git")
+	if _, err := os.Stat(gitDirPath); err != nil {
+		return fmt.Errorf("指定されたディレクトリはGitリポジトリではありません（.gitディレクトリが見つかりません）: %s", absPath)
+	}
+
+	// リポジトリを開く
+	a.repoPath = absPath
 	repo, err := git.PlainOpen(a.repoPath)
 	if err != nil {
 		return fmt.Errorf("リポジトリを開けませんでした: %w", err)
 	}
+
 	a.repo = repo
 
-	// リポジトリ名を設定
-	a.stats.RepositoryName = filepath.Base(a.repoPath)
+	// 新しいRepositoryStatsオブジェクトを作成
+	a.stats = &models.RepositoryStats{
+		Files:          make(map[string]models.FileChangeInfo),
+		RepositoryPath: a.repoPath,
+		RepositoryName: filepath.Base(a.repoPath),
+	}
+
 	return nil
 }
 
@@ -90,62 +121,78 @@ func (a *RepositoryAnalyzer) Clone(url string) error {
 	return nil
 }
 
-// Analyze はリポジトリを解析し、統計情報を収集する
+// Analyze はGitリポジトリを解析してヒートマップ情報を生成する
 func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
+	// リポジトリが開かれていることを確認
 	if a.repo == nil {
 		return nil, fmt.Errorf("リポジトリが開かれていません")
 	}
 
-	// コミット履歴を取得
-	ref, err := a.repo.Head()
-	if err != nil {
-		return nil, fmt.Errorf("HEAD参照を取得できませんでした: %w", err)
-	}
-
-	commits, err := a.repo.Log(&git.LogOptions{From: ref.Hash()})
-	if err != nil {
-		return nil, fmt.Errorf("コミット履歴を取得できませんでした: %w", err)
-	}
-
-	// 1. すべてのコミットを収集
-	var commitList []*object.Commit
-	err = commits.ForEach(func(c *object.Commit) error {
-		// 日付フィルタが設定されている場合は日付をチェック
-		if a.sinceDate != nil && c.Committer.When.Before(*a.sinceDate) {
-			return nil // 指定日付より前のコミットはスキップ
+	// 統計情報を初期化
+	if a.stats == nil {
+		a.stats = &models.RepositoryStats{
+			Files:          make(map[string]models.FileChangeInfo),
+			RepositoryPath: a.repoPath, // リポジトリパスを設定
+			RepositoryName: filepath.Base(a.repoPath),
 		}
-		commitList = append(commitList, c)
-		return nil
-	})
+	} else {
+		// 既に初期化されている場合も、リポジトリパスを確実に設定
+		a.stats.RepositoryPath = a.repoPath
+	}
 
+	// リポジトリ名を設定
+	repoName := filepath.Base(a.repoPath)
+	a.stats.RepositoryName = repoName
+
+	// コミット履歴を取得
+	commitIter, err := a.repo.Log(&git.LogOptions{
+		Order: git.LogOrderCommitterTime,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("コミット履歴の取得に失敗しました: %w", err)
 	}
 
-	// 最初と最後のコミットを特定
+	// 全コミットを配列に格納
+	var commitList []*object.Commit
 	var firstCommit, lastCommit *object.Commit
-	if len(commitList) > 0 {
-		firstCommit = commitList[len(commitList)-1] // 最も古いコミット
-		lastCommit = commitList[0]                  // 最新のコミット
-	}
+	lastCommitIndex := 0
 
-	// 著者情報の共有マップ
-	authors := make(map[string]models.AuthorStat)
-
-	// 2. マルチスレッド処理でコミットを解析
-	if a.workerCount > 1 && len(commitList) > 0 {
-		// ワーカー数を調整（コミット数より多く設定しないように）
-		workerCount := a.workerCount
-		if workerCount > len(commitList) {
-			workerCount = len(commitList)
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		// 指定日以降のコミットのみを対象にする
+		if a.sinceDate != nil && c.Committer.When.Before(*a.sinceDate) {
+			return nil
 		}
 
-		// コミットをワーカー数に応じて分割
-		chunkSize := (len(commitList) + workerCount - 1) / workerCount
+		commitList = append(commitList, c)
+		// 最初のコミット（最新）と最後のコミット（最古）を記録
+		if lastCommitIndex == 0 {
+			lastCommit = c
+		}
+		firstCommit = c
+		lastCommitIndex++
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("コミット履歴の解析に失敗しました: %w", err)
+	}
+
+	// 著者の統計情報を保持するマップ
+	authors := make(map[string]models.AuthorStat)
+
+	// 並列処理を行う場合（デフォルトはシングルスレッド）
+	if a.workerCount > 1 {
+		fmt.Printf("並列コミット処理を開始します（ワーカー数: %d）\n", a.workerCount)
+
+		// WaitGroupを使ってゴルーチンの終了を待機
 		var wg sync.WaitGroup
 
-		// 各ワーカーが担当するコミット範囲を処理
-		for i := 0; i < workerCount; i++ {
+		// 各ワーカーのチャンクサイズを計算
+		chunkSize := (len(commitList) + a.workerCount - 1) / a.workerCount
+
+		// ワーカーを起動
+		for i := 0; i < a.workerCount; i++ {
 			wg.Add(1)
 
 			// 各ワーカーの処理範囲を計算
@@ -158,7 +205,112 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 			// ゴルーチンでコミット解析を実行
 			go func(commits []*object.Commit) {
 				defer wg.Done()
-				a.processCommits(commits, authors)
+
+				// 各ワーカー用の著者情報を一時的に保持
+				localAuthors := make(map[string]models.AuthorStat)
+				localFiles := make(map[string]models.FileChangeInfo)
+
+				// ローカル処理 - 著者情報を更新
+				for _, c := range commits {
+					authorName := c.Author.Name
+					authorStat, exists := localAuthors[authorName]
+					if !exists {
+						authorStat = models.AuthorStat{
+							Name: authorName,
+						}
+					}
+					authorStat.CommitCount++
+					localAuthors[authorName] = authorStat
+
+					// ファイルの変更状況を解析
+					stats, err := c.Stats()
+					if err != nil {
+						fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+						continue
+					}
+
+					// 各ファイルの統計情報を更新（ローカル）
+					for _, stat := range stats {
+						filePath := stat.Name
+						if !a.isFileMatched(filePath) {
+							continue
+						}
+
+						fileInfo, exists := localFiles[filePath]
+						if !exists {
+							fileInfo = models.FileChangeInfo{
+								FilePath:       filePath,
+								ChangeCount:    0,
+								LastModified:   c.Author.When,
+								Authors:        make(map[string]int),
+								LineChanges:    make(map[int]int),
+								LineContents:   make(map[int]string),
+								CommitMessages: []string{},
+								FileType:       filepath.Ext(filePath),
+							}
+						}
+
+						// 変更回数をカウント
+						fileInfo.ChangeCount++
+						fileInfo.LastModified = c.Author.When
+						fileInfo.Authors[authorName]++
+
+						// コミットメッセージを蓄積（最大5つまで）
+						if len(fileInfo.CommitMessages) < 5 {
+							if !containsString(fileInfo.CommitMessages, c.Message) {
+								fileInfo.CommitMessages = append(fileInfo.CommitMessages, c.Message)
+							}
+						}
+
+						localFiles[filePath] = fileInfo
+					}
+				}
+
+				// ローカルデータをグローバルに集約（一度だけロック）
+				a.mutex.Lock()
+
+				// 著者情報をマージ
+				for name, stat := range localAuthors {
+					globalStat, exists := authors[name]
+					if exists {
+						globalStat.CommitCount += stat.CommitCount
+					} else {
+						globalStat = stat
+					}
+					authors[name] = globalStat
+				}
+
+				// ファイル情報をマージ
+				for path, fileInfo := range localFiles {
+					globalFileInfo, exists := a.stats.Files[path]
+					if exists {
+						// 既存のファイル情報をマージ
+						globalFileInfo.ChangeCount += fileInfo.ChangeCount
+						if fileInfo.LastModified.After(globalFileInfo.LastModified) {
+							globalFileInfo.LastModified = fileInfo.LastModified
+						}
+
+						// 著者情報をマージ
+						for author, count := range fileInfo.Authors {
+							globalFileInfo.Authors[author] += count
+						}
+
+						// コミットメッセージをマージ
+						for _, msg := range fileInfo.CommitMessages {
+							if len(globalFileInfo.CommitMessages) < 5 && !containsString(globalFileInfo.CommitMessages, msg) {
+								globalFileInfo.CommitMessages = append(globalFileInfo.CommitMessages, msg)
+							}
+						}
+					} else {
+						// 新しいファイル
+						globalFileInfo = fileInfo
+						a.stats.FileCount++
+					}
+
+					a.stats.Files[path] = globalFileInfo
+				}
+
+				a.mutex.Unlock()
 			}(commitList[startIdx:endIdx])
 		}
 
@@ -166,7 +318,88 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 		wg.Wait()
 	} else {
 		// シングルスレッドで処理
-		a.processCommits(commitList, authors)
+		for _, c := range commitList {
+			// 著者情報を更新
+			authorName := c.Author.Name
+
+			authorStat, exists := authors[authorName]
+			if !exists {
+				authorStat = models.AuthorStat{
+					Name: authorName,
+				}
+			}
+			authorStat.CommitCount++
+			authors[authorName] = authorStat
+
+			// ファイルの変更状況を解析
+			stats, err := c.Stats()
+			if err != nil {
+				// エラー処理
+				fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+				continue
+			}
+
+			// 各ファイルの統計情報を更新
+			for _, stat := range stats {
+				filePath := stat.Name
+				if !a.isFileMatched(filePath) {
+					continue
+				}
+
+				fileInfo, exists := a.stats.Files[filePath]
+				if !exists {
+					fileInfo = models.FileChangeInfo{
+						FilePath:       filePath,
+						ChangeCount:    0,
+						LastModified:   c.Author.When,
+						Authors:        make(map[string]int),
+						LineChanges:    make(map[int]int),
+						LineContents:   make(map[int]string),
+						CommitMessages: []string{},
+						FileType:       filepath.Ext(filePath),
+					}
+					a.stats.FileCount++
+
+					// 最新コミットの場合、ファイルの内容を読み込んで保存
+					if c == commitList[0] {
+						// ファイルオブジェクトを取得
+						fileObj, err := c.File(filePath)
+						if err == nil {
+							// バイナリファイルは処理しない
+							isBinary, err := fileObj.IsBinary()
+							if err == nil && !isBinary {
+								// ファイル内容を読み込む
+								content, err := fileObj.Contents()
+								if err == nil {
+									lines := strings.Split(content, "\n")
+									for i, line := range lines {
+										lineNumber := i + 1
+										fileInfo.LineContents[lineNumber] = line
+									}
+								}
+							} else if isBinary {
+								// バイナリファイルはスキップ
+								fmt.Printf("バイナリファイル '%s' はスキップします\n", filePath)
+							}
+						}
+					}
+				}
+
+				// 変更回数をカウント
+				fileInfo.ChangeCount++
+				fileInfo.LastModified = c.Author.When
+				fileInfo.Authors[authorName]++
+
+				// コミットメッセージを蓄積（最大5つまで）
+				if len(fileInfo.CommitMessages) < 5 {
+					if !containsString(fileInfo.CommitMessages, c.Message) {
+						fileInfo.CommitMessages = append(fileInfo.CommitMessages, c.Message)
+					}
+				}
+
+				a.stats.Files[filePath] = fileInfo
+			}
+		}
 	}
 
 	// コミット数を設定
@@ -214,19 +447,17 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 		authorStat.CommitCount++
 		authors[authorName] = authorStat
 
-		a.mutex.Unlock()
-
 		// ファイルの変更状況を解析
 		// 各コミットで変更されたファイルを追跡
 		stats, err := c.Stats()
 		if err != nil {
 			// エラー処理
 			fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+			a.mutex.Unlock()
 			continue
 		}
 
 		// 各ファイルの統計情報を更新
-		a.mutex.Lock()
 		for _, stat := range stats {
 			filePath := stat.Name
 			if !a.isFileMatched(filePath) {

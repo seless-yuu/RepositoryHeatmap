@@ -2,7 +2,6 @@
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -108,18 +107,54 @@ func GetHeatColor(heatLevel float64) string {
 	}
 }
 
-// generateRepositoryHeatmap はリポジトリ全体のヒートマップを生成すめE
-func (v *Visualizer) generateRepositoryHeatmap() error {
-	// 出力ファイルパスを作成
-	outputPath := filepath.Join(v.outputDir, fmt.Sprintf("%s-repository-heatmap.%s", v.stats.RepositoryName, v.outputType))
+// min returns the smaller of x or y
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
 
-	// SVG形式の場合吁E
-	if v.outputType == "svg" {
-		return v.generateSVGRepositoryHeatmap(outputPath)
+// generateRepositoryHeatmap はリポジトリ全体のヒートマップを生成する
+func (v *Visualizer) generateRepositoryHeatmap() error {
+	// リポジトリ名の検証
+	if v.stats.RepositoryName == "" {
+		return fmt.Errorf("リポジトリ名が設定されていません")
 	}
 
-	// WebP形式の場合吁E
-	return v.generateWebPRepositoryHeatmap(outputPath)
+	// 出力ディレクトリのチェックと作成
+	if err := utils.EnsureDirectoryExists(v.outputDir); err != nil {
+		return fmt.Errorf("出力ディレクトリの作成に失敗しました: %w", err)
+	}
+
+	// 出力ファイルパスを決定
+	outputFileName := fmt.Sprintf("%s-repository-heatmap.%s", v.stats.RepositoryName, v.outputType)
+	outputPath := filepath.Join(v.outputDir, outputFileName)
+
+	// ファイルヒートマップ用のディレクトリを作成
+	fileHeatmapDir := filepath.Join(v.outputDir, "file-heatmaps")
+	if err := utils.EnsureDirectoryExists(fileHeatmapDir); err != nil {
+		return fmt.Errorf("ファイルヒートマップディレクトリの作成に失敗しました: %w", err)
+	}
+
+	// 出力タイプに基づいてヒートマップを生成
+	var err error
+	if v.outputType == "svg" {
+		err = v.generateSVGRepositoryHeatmap(outputPath)
+	} else {
+		err = v.generateWebPRepositoryHeatmap(outputPath)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// ファイルごとのヒートマップを生成
+	if err := v.generateFileHeatmaps(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // generateSVGRepositoryHeatmap はSVG形式のリポジトリヒートマップを生成すめE
@@ -130,9 +165,6 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 		return fmt.Errorf("SVGファイルの作成に失敗しました: %w", err)
 	}
 	defer file.Close()
-
-	// チエーマップのルートノードを作成
-	root := v.buildFileTree()
 
 	// 描画パラメータ
 	canvasWidth := 1200
@@ -148,6 +180,19 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	treeMapWidth := canvasWidth - marginLeft - marginRight
 	treeMapHeight := canvasHeight - marginTop - marginBottom
 
+	// ファイルを変更頻度でソートし、表示数を制限する
+	files := getSortedFilesByHeat(v.stats)
+	if v.maxFilesToShow > 0 {
+		if v.maxFilesToShow < len(files) {
+			files = files[:v.maxFilesToShow]
+		}
+	} else {
+		v.maxFilesToShow = len(files) // maxFilesToShowが0の場合は全ファイルを表示
+	}
+
+	// ツリー構造を構築
+	root := v.buildFileTreeFromFiles(files)
+
 	// チエーマップレイアウトを計箁E
 	rootRect := Rectangle{
 		X:      float64(marginLeft),
@@ -157,26 +202,19 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	}
 	v.layoutTreeMap(root, rootRect)
 
-	// リポジトリ全体に戻るパスを計箁E
-	// ファイル個別SVGは常にfile-heatmapsチエーマップディレクトリ冁E生され、E
-	// リポジトリ全体SVGはそエ親チエーマップディレクトリにあるので、常に "../" で戻れる
-
 	// SVGヘッダーを書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
-  <rect width="100%%" height="100%%" fill="#f0f0f0"/>
-  <a href="../../%s-repository-heatmap.%s" title="リポジトリ全体のヒートマップに戻る">
-    <text x="50" y="30" font-size="16" font-family="Segoe UI, Helvetica, Arial" fill="#333333">← リポジトリ全体に戻る</text>
-  </a>
-  <text x="%d" y="40" font-size="24" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">%s リポジトリヒートマップ</text>
-  <text x="%d" y="70" font-size="14" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">コミット数: %d, ファイル数: %d, 期間: %s 〜 %s</text>
-  <text x="%d" y="90" font-size="12" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle">※ 変更頻度上位 %d ファイルを表示（全 %d ファイル中）</text>
-  
-  <!-- 凡例 -->
-  <g transform="translate(50, 30)">
-    <text x="0" y="0" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="#333333">変更頻度:</text>
-    <text x="105" y="0" font-size="10" font-family="Segoe UI, Helvetica, Arial" fill="#333333">低</text>
-    <rect x="130" y="-10" width="20" height="12" fill="#FFE0B2" />
+  <title>%s Repository Heatmap (%s)</title>
+  <text x="%d" y="30" text-anchor="middle" font-size="20" font-family="Segoe UI, Helvetica, Arial" fill="#333333">%s</text>
+  <text x="%d" y="50" text-anchor="middle" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="#666666">コミット数: %d, ファイル数: %d</text>
+  <text x="%d" y="65" text-anchor="middle" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="#666666">期間: %s 〜 %s</text>
+  <text x="%d" y="80" text-anchor="middle" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="#666666">表示: %d / %d ファイル</text>
+  <g transform="translate(10, 100)">
+    <text x="10" y="0" font-size="10" font-family="Segoe UI, Helvetica, Arial" fill="#333333">低</text>
+    <rect x="30" y="-10" width="20" height="12" fill="#FFFFFF" stroke="#CCCCCC" />
+    <rect x="80" y="-10" width="20" height="12" fill="#FFE5CC" />
+    <rect x="130" y="-10" width="20" height="12" fill="#FFD199" />
     <rect x="180" y="-10" width="20" height="12" fill="#FFAB66" />
     <rect x="230" y="-10" width="20" height="12" fill="#FF8533" />
     <rect x="280" y="-10" width="20" height="12" fill="#E65C00" />
@@ -187,8 +225,8 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 		v.stats.RepositoryName, v.outputType,
 		canvasWidth/2, v.stats.RepositoryName,
 		canvasWidth/2, v.stats.CommitCount, len(v.stats.Files),
-		v.stats.FirstCommitAt.Format("2006/01/02"), v.stats.LastCommitAt.Format("2006/01/02"),
-		canvasWidth/2, len(getSortedFilesByHeat(v.stats)[:v.maxFilesToShow]), len(v.stats.Files))
+		canvasWidth/2, v.stats.FirstCommitAt.Format("2006/01/02"), v.stats.LastCommitAt.Format("2006/01/02"),
+		canvasWidth/2, len(files), len(v.stats.Files))
 
 	// チエーマップを描画
 	v.renderTreeMap(file, root)
@@ -200,20 +238,13 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	return nil
 }
 
-// buildFileTree はファイル情報からチエーツリー構造を構築すめE
-func (v *Visualizer) buildFileTree() *TreeNode {
+// buildFileTreeFromFiles はファイル情報からチエーツリー構造を構築すめE
+func (v *Visualizer) buildFileTreeFromFiles(files []models.FileChangeInfo) *TreeNode {
 	root := &TreeNode{
 		Name:     "root",
 		Path:     "",
 		IsDir:    true,
 		Children: []*TreeNode{},
-	}
-
-	// ファイルのソートと制陁E
-	files := getSortedFilesByHeat(v.stats)
-	maxFiles := v.maxFilesToShow
-	if len(files) > maxFiles {
-		files = files[:maxFiles]
 	}
 
 	// 吁Eァイルをツリーに追加
@@ -355,71 +386,73 @@ func (v *Visualizer) layoutTreeMap(node *TreeNode, rect Rectangle) {
 	}
 }
 
-// renderTreeMap はチエーマップをSVGに描画する
+// renderTreeMap はツリーマップを描画する
 func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
-	// ルートノードを描画しなぁE
-	if node.Name == "root" {
-		// 子ノードを描画
-		for _, child := range node.Children {
-			v.renderTreeMap(file, child)
-		}
-		return
+	// ボーダーと背景色を設定
+	border := "#CCCCCC"
+	bgColor := "#FFFFFF"
+
+	// ヒートレベルに基づく色をディレクトリにも割り当てる
+	if node.IsDir {
+		bgColor = "#F8F8F8" // ディレクトリはわずかにグレー
+	} else {
+		// ヒートレベルに基づいて色を取得
+		bgColor = GetHeatColor(node.HeatLevel)
 	}
 
 	// ノードの矩形を描画
-	rect := node.Rect
+	fmt.Fprintf(file, `  <rect x="%f" y="%f" width="%f" height="%f" fill="%s" stroke="%s">
+    <title>%s (変更: %d)</title>
+  </rect>`,
+		node.Rect.X, node.Rect.Y, node.Rect.Width, node.Rect.Height,
+		bgColor, border, node.Path, int(node.Size))
 
-	// 最小サイズの確認（あまりに小さぁE形は描画しなぁEE
-	if rect.Width < 2 || rect.Height < 2 {
-		return
-	}
-
-	// 色を決宁E
-	var color string
-	if node.IsDir {
-		// チエーマップは薁Eグレー
-		color = "#e0e0e0"
-	} else {
-		// ファイルはヒートレベルに応じた色
-		color = GetHeatColor(node.HeatLevel)
-	}
-
-	// ファイルノードの場合E、リンクを追加
+	// ファイルノードの場合、リンクを追加
 	if !node.IsDir {
 		// ファイル名をサニタイズ
 		safeFileName := utils.SanitizePath(node.Path)
-		// リンク先はファイルパスE相対パスEE
-		linkPath := fmt.Sprintf("file-heatmaps/%s.%s", safeFileName, v.outputType)
+		// リンク先はfile-heatmapsディレクトリ内のファイル
+		// 常に相対パスで指定（リポジトリヒートマップSVGからの相対パス）
+		linkPath := fmt.Sprintf("./file-heatmaps/%s.%s", safeFileName, v.outputType)
 
-		// リンクタグを開姁E
+		// リンクタグを開始
 		fmt.Fprintf(file, `  <a href="%s" target="_blank">`, linkPath)
 	}
 
-	// 矩形を描画
-	fmt.Fprintf(file, `  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" stroke="#ffffff" stroke-width="1">
-    <title>%s (変更回数: %d)</title>
-  </rect>`,
-		rect.X, rect.Y, rect.Width, rect.Height, color, node.Path, int(node.Size))
-
-	// チエードを表示E十刁E大きさの場合EみEE
-	if rect.Width > 40 && rect.Height > 14 {
-		// 表示名を短縮
-		displayName := node.Name
-		if len(displayName) > 20 {
-			displayName = displayName[:17] + "..."
+	// ノード名が表示できる十分なスペースがある場合のみ表示（幅 > 40px および 高さ > 14px）
+	if node.Rect.Width > 40 && node.Rect.Height > 14 {
+		// ファイル/ディレクトリ名を表示
+		name := node.Name
+		// 名前が長い場合は省略（表示幅に合わせる）
+		if float64(len(name)*7) > node.Rect.Width {
+			maxChars := int(node.Rect.Width / 7)
+			if maxChars > 3 {
+				name = name[:maxChars-3] + "..."
+			} else if maxChars > 0 {
+				name = name[:maxChars]
+			} else {
+				name = ""
+			}
 		}
 
-		fmt.Fprintf(file, `
-  <text x="%.1f" y="%.1f" font-size="14" font-family="Segoe UI, Helvetica, Arial" fill="#000000" pointer-events="none">%s</text>`,
-			rect.X+4, rect.Y+16, displayName)
+		if name != "" {
+			// テキストは白または黒（背景色に基づいて）
+			textColor := "#000000" // デフォルトは黒
+			if node.HeatLevel > 0.6 {
+				textColor = "#FFFFFF" // 暗い背景色の場合は白
+			}
+
+			fmt.Fprintf(file, `  <text x="%f" y="%f" font-size="12" font-family="Segoe UI, Helvetica, Arial" fill="%s">%s</text>`,
+				node.Rect.X+5, node.Rect.Y+15, textColor, name)
+		}
 	}
 
-	// ファイルノードの場合E、リンクタグを閉じる
+	// ファイルノードの場合、リンクタグを閉じる
 	if !node.IsDir {
 		fmt.Fprintf(file, `  </a>`)
 	}
 
-	// 子ノードを再帰皁E描画
+	// 子ノードを再帰的に描画
 	for _, child := range node.Children {
 		v.renderTreeMap(file, child)
 	}
@@ -441,133 +474,92 @@ func (v *Visualizer) generateWebPRepositoryHeatmap(outputPath string) error {
 	return nil
 }
 
-// generateFileHeatmaps は吁Eァイルのヒートマップを生成すめE
+// generateFileHeatmaps はファイルごとのヒートマップを生成する
 func (v *Visualizer) generateFileHeatmaps() error {
-	// ファイルヒートマップの出力ディレクトリを作成
+	// 出力ディレクトリを確認
 	fileHeatmapDir := filepath.Join(v.outputDir, "file-heatmaps")
 	if err := utils.EnsureDirectoryExists(fileHeatmapDir); err != nil {
 		return fmt.Errorf("ファイルヒートマップディレクトリの作成に失敗しました: %w", err)
 	}
 
-	// 吁Eァイルのヒートマップを生成
-	for filePath, fileInfo := range v.stats.Files {
-		// ファイルパスを安Eな形式に変換
+	// ファイルを変更頻度でソート
+	files := getSortedFilesByHeat(v.stats)
+
+	// maxFilesToShowの値を確認
+	maxFiles := v.maxFilesToShow
+	if maxFiles <= 0 || maxFiles > len(files) {
+		maxFiles = len(files)
+	}
+
+	// 選択されたファイルのみヒートマップを生成
+	selectedFiles := files[:maxFiles]
+
+	// 選択されたファイルのヒートマップを生成
+	for _, fileInfo := range selectedFiles {
+		filePath := fileInfo.FilePath
+		// ファイルパスを安全な形式に変換
 		safeFileName := utils.SanitizePath(filePath)
 
-		// HTMLのリンクではスラチゥを使用する忁Eがあるため、E
-		// 格納する実際のファイルシスチEパスに変換
+		// HTMLのリンクではスラッシュを使用する必要があるため、
+		// 格納する実際のファイルシステムパスに変換
 		fsPath := filepath.FromSlash(safeFileName)
 
 		// 出力ファイルパスを作成
 		outputPath := filepath.Join(fileHeatmapDir, fsPath+"."+v.outputType)
 
-		// ファイルの階層の深さを計算して適切な相対パスを生成
-		// 例: "foo/bar/baz.go" -> "../../../gin-repository-heatmap.svg"
-		depth := len(strings.Split(fsPath, string(filepath.Separator)))
-		relativePathPrefix := strings.Repeat("../", depth+1) // +1 for file-heatmaps directory
-		repoSVGRelPath := fmt.Sprintf("%s%s-repository-heatmap.%s", relativePathPrefix, v.stats.RepositoryName, v.outputType)
-
-		// 親チエーマップディレクトリが存在することを碁E
+		// 親ディレクトリが存在することを確認
 		parentDir := filepath.Dir(outputPath)
 		if err := utils.EnsureDirectoryExists(parentDir); err != nil {
-			return fmt.Errorf("チエーマップディレクトリの作成に失敗しました: %s: %w", parentDir, err)
+			return fmt.Errorf("ディレクトリの作成に失敗しました: %s: %w", parentDir, err)
 		}
 
-		// ファイルの変更頻度に基づく色を取征E
+		// ファイルの変更頻度に基づく色を取得
 		color := GetHeatColor(fileInfo.HeatLevel)
 
-		// SVG形式の場合吁E
+		// SVG形式の場合
 		var err error
 		if v.outputType == "svg" {
-			err = v.generateSVGFileHeatmap(outputPath, filePath, fileInfo, color, repoSVGRelPath)
+			err = v.generateSVGFileHeatmap(outputPath, filePath, fileInfo, color)
 		} else {
-			// WebP形式の場合吁E
+			// WebP形式の場合
 			err = v.generateWebPFileHeatmap(outputPath, filePath, fileInfo, color)
 		}
 
-		// エラーが発生した場合E処琁E中断
+		// エラーが発生した場合は処理を中断
 		if err != nil {
 			return fmt.Errorf("ファイル '%s' のヒートマップ生成に失敗しました: %w", filePath, err)
 		}
 	}
 
-	fmt.Printf("ファイルヒートマップを保存しました: %s\n", fileHeatmapDir)
 	return nil
 }
 
-// readFileContent はファイルの冁Eを読み込む
+// readFileContent はファイルの内容を読み込む
 func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
-	var attemptedPaths []string
+	// 1. まずJSONデータに保存されたLineContentsを確認
+	fileInfo, exists := v.stats.Files[filePath]
+	if exists && len(fileInfo.LineContents) > 0 {
+		// すでに読み込んだ内容があれば、それを使用
+		lines := make([]string, len(fileInfo.LineContents))
+		for lineNum, content := range fileInfo.LineContents {
+			lines[lineNum-1] = content // LineContentsは1始まりのインデックス
+		}
+		return lines, nil
+	}
 
-	// 1. JSONファイルの場所を基準にした相対パス
-	if v.inputJSONPath != "" {
-		jsonDir := filepath.Dir(v.inputJSONPath)
-		repoName := v.stats.RepositoryName
-
-		// パターン1: JSONファイルと同じチエーマップディレクトリ
-		fullPath := filepath.Join(jsonDir, filePath)
-		attemptedPaths = append(attemptedPaths, fullPath)
+	// 2. 分析対象のリポジトリパスが設定されている場合
+	if v.stats.RepositoryPath != "" {
+		fullPath := filepath.Join(v.stats.RepositoryPath, filePath)
+		// パスが実際に存在するか確認
 		if _, err := os.Stat(fullPath); err == nil {
 			return v.readFile(fullPath)
 		}
-
-		// パターン2: JSONファイルの親チエーマップディレクトリのtest-reposチエーマップディレクトリ + リポジトリ吁E
-		testRepoPath := filepath.Join(jsonDir, "..", "test-repos", repoName)
-		fullPath = filepath.Join(testRepoPath, filePath)
-		attemptedPaths = append(attemptedPaths, fullPath)
-		if _, err := os.Stat(fullPath); err == nil {
-			return v.readFile(fullPath)
-		}
-
-		// パターン2.1: test-reposチエーマップディレクトリ直丁E(repoNameなぁE
-		testRepoPath = filepath.Join(jsonDir, "..", "test-repos")
-		fullPath = filepath.Join(testRepoPath, filePath)
-		attemptedPaths = append(attemptedPaths, fullPath)
-		if _, err := os.Stat(fullPath); err == nil {
-			return v.readFile(fullPath)
-		}
-
-		// パターン3: カレントディレクトリのtest-reposチエーマップディレクトリ + リポジトリ吁E
-		workingDir, err := os.Getwd()
-		if err == nil {
-			testPath := filepath.Join(workingDir, "test-repos", repoName, filePath)
-			attemptedPaths = append(attemptedPaths, testPath)
-			if _, err := os.Stat(testPath); err == nil {
-				return v.readFile(testPath)
-			}
-
-			// パターン3.1: カレントディレクトリのtest-reposチエーマップディレクトリ直丁E(repoNameなぁE
-			testPath = filepath.Join(workingDir, "test-repos", filePath)
-			attemptedPaths = append(attemptedPaths, testPath)
-			if _, err := os.Stat(testPath); err == nil {
-				return v.readFile(testPath)
-			}
-		}
+		// ファイルが見つからない場合はエラーメッセージを返す
+		return []string{fmt.Sprintf("// ファイル %s が見つかりません（%s）", filePath, fullPath)}, nil
 	}
 
-	// 2. 相対パスをそのまま試す（カレントディレクトリからの相対パスEE
-	workingDir, err := os.Getwd()
-	if err == nil {
-		fullPath := filepath.Join(workingDir, filePath)
-		attemptedPaths = append(attemptedPaths, fullPath)
-		if _, err := os.Stat(fullPath); err == nil {
-			return v.readFile(fullPath)
-		}
-	}
-
-	// 3. 絶対パスとして試ぁE
-	attemptedPaths = append(attemptedPaths, filePath)
-	if _, err := os.Stat(filePath); err == nil {
-		return v.readFile(filePath)
-	}
-
-	// すべての試行が失敗した場吁E
-	errMsg := fmt.Sprintf("ファイルの冁Eを読み込めませんでした: %s\n以下Eパスを試行しました:\n", filePath)
-	for _, path := range attemptedPaths {
-		errMsg += fmt.Sprintf("- %s\n", path)
-	}
-
-	return nil, errors.New(errMsg)
+	// 3. リポジトリパスが設定されていない場合
+	return []string{"// リポジトリパスが設定されていないため、ファイル内容を読み込めません"}, nil
 }
 
 func (v *Visualizer) readFile(fullPath string) ([]string, error) {
@@ -595,8 +587,8 @@ func escapeSpecialChars(text string) string {
 	return text
 }
 
-// generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成すめE
-func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string, repoSVGRelPath string) error {
+// generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成する
+func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
 	// ファイルを作成
 	file, err := os.Create(outputPath)
 	if err != nil {
@@ -661,17 +653,10 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		title = "..." + title[len(title)-77:]
 	}
 
-	// リポジトリ全体に戻るパスを計箁E
-	// ファイル個別SVGは常にfile-heatmapsチエーマップディレクトリ冁E生され、E
-	// リポジトリ全体SVGはそエ親チエーマップディレクトリにあるので、常に "../" で戻れる
-
 	// SVGヘッダーを書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%%" height="100%%" fill="#f0f0f0"/>
-  <a href="%s" title="リポジトリ全体のヒートマップに戻る">
-    <text x="50" y="30" font-size="16" font-family="Segoe UI, Helvetica, Arial" fill="#333333">← リポジトリ全体に戻る</text>
-  </a>
   <text x="600" y="40" font-size="24" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#333333">ファイルヒートマップ</text>
   <text x="600" y="70" font-size="14" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#333333">%s</text>
   <text x="600" y="90" font-size="12" font-family="Segoe UI, Helvetica, Arial" text-anchor="middle" fill="#666666">変更回数: %d, 最終更新: %s</text>
@@ -681,7 +666,6 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
     <!-- 行番号とコード-->
 `,
 		maxWidth, canvasHeight,
-		repoSVGRelPath,
 		title, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
 		marginLeft, marginTop)
 

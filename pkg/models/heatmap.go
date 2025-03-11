@@ -28,6 +28,7 @@ type CommitInfo struct {
 // RepositoryStats はリポジトリ全体の統計情報を表す構造体
 type RepositoryStats struct {
 	RepositoryName string                    `json:"repository_name"` // リポジトリ名
+	RepositoryPath string                    `json:"repository_path"` // リポジトリの絶対パス
 	AnalyzedAt     time.Time                 `json:"analyzed_at"`     // 解析実行日時
 	CommitCount    int                       `json:"commit_count"`    // 総コミット数
 	AuthorCount    int                       `json:"author_count"`    // 著者数
