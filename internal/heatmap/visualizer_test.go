@@ -7,7 +7,7 @@ import (
 )
 
 func TestSortFilesByHeat(t *testing.T) {
-	// テスト用のリポジトリ統計を作成
+	// Create test repository statistics
 	stats := &models.RepositoryStats{
 		RepositoryName: "test-repo",
 		Files: map[string]models.FileChangeInfo{
@@ -34,10 +34,10 @@ func TestSortFilesByHeat(t *testing.T) {
 		},
 	}
 
-	// 関数を実行
+	// Execute the function
 	sortedFiles := sortFilesByHeat(stats)
 
-	// 期待される並び順を確認
+	// Verify expected order
 	expectedOrder := []string{"file3.go", "file1.go", "file2.go", "file4.go"}
 
 	if len(sortedFiles) != len(expectedOrder) {
@@ -106,7 +106,7 @@ func TestGetHeatColor(t *testing.T) {
 }
 
 func TestBuildFileTreeFromFiles(t *testing.T) {
-	// テスト用のファイルリストを作成
+	// Create test file list
 	files := []models.FileChangeInfo{
 		{
 			FilePath:    "src/main.go",
@@ -125,13 +125,13 @@ func TestBuildFileTreeFromFiles(t *testing.T) {
 		},
 	}
 
-	// テスト用のビジュアライザを作成
+	// Create test visualizer
 	v := NewVisualizer("output", "svg", &models.RepositoryStats{}, 10, "")
 
-	// ツリー構築を実行
+	// Execute tree construction
 	tree := v.buildFileTreeFromFiles(files)
 
-	// ルートノードの検証
+	// Verify root node
 	if tree == nil {
 		t.Fatal("Tree node should not be nil")
 	}
@@ -140,12 +140,12 @@ func TestBuildFileTreeFromFiles(t *testing.T) {
 		t.Errorf("Expected root node name to be 'root', got %s", tree.Name)
 	}
 
-	// 子ノードの数を検証（srcディレクトリとREADME.mdファイル）
+	// Verify number of child nodes (src directory and README.md file)
 	if len(tree.Children) != 2 {
 		t.Errorf("Expected root to have 2 children, got %d", len(tree.Children))
 	}
 
-	// ディレクトリと子ノードの構造を検証
+	// Verify directory and child node structure
 	var srcDir *TreeNode
 	var readmeFile *TreeNode
 
@@ -165,5 +165,96 @@ func TestBuildFileTreeFromFiles(t *testing.T) {
 
 	if readmeFile == nil {
 		t.Error("Expected to find a 'README.md' file node")
+	}
+}
+
+func TestParseJSONPath(t *testing.T) {
+	testCases := []struct {
+		name          string
+		jsonPath      string
+		expectedDir   string
+		expectedBase  string
+		expectedError bool
+	}{
+		{
+			name:          "Valid JSON path with directory",
+			jsonPath:      "output/data/heatmap.json",
+			expectedDir:   "output/data",
+			expectedBase:  "heatmap.json",
+			expectedError: false,
+		},
+		{
+			name:          "JSON path without directory",
+			jsonPath:      "heatmap.json",
+			expectedDir:   ".",
+			expectedBase:  "heatmap.json",
+			expectedError: false,
+		},
+		{
+			name:          "Empty path",
+			jsonPath:      "",
+			expectedDir:   "",
+			expectedBase:  "",
+			expectedError: true,
+		},
+		{
+			name:          "Directory only",
+			jsonPath:      "output/data/",
+			expectedDir:   "",
+			expectedBase:  "",
+			expectedError: true,
+		},
+		{
+			name:          "Invalid file extension",
+			jsonPath:      "output/data/heatmap.txt",
+			expectedDir:   "",
+			expectedBase:  "",
+			expectedError: true,
+		},
+		{
+			name:          "Multiple JSON extensions",
+			jsonPath:      "output/data/heatmap.json.json",
+			expectedDir:   "",
+			expectedBase:  "",
+			expectedError: true,
+		},
+		{
+			name:          "Path with spaces",
+			jsonPath:      "output/my data/heat map.json",
+			expectedDir:   "output/my data",
+			expectedBase:  "heat map.json",
+			expectedError: false,
+		},
+		{
+			name:          "Absolute path",
+			jsonPath:      "/usr/local/data/heatmap.json",
+			expectedDir:   "/usr/local/data",
+			expectedBase:  "heatmap.json",
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, base, err := parseJSONPath(tc.jsonPath)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error for path %q, but got nil", tc.jsonPath)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for path %q: %v", tc.jsonPath, err)
+				}
+
+				if dir != tc.expectedDir {
+					t.Errorf("Expected directory %q, got %q", tc.expectedDir, dir)
+				}
+
+				if base != tc.expectedBase {
+					t.Errorf("Expected base name %q, got %q", tc.expectedBase, base)
+				}
+			}
+		})
 	}
 }
