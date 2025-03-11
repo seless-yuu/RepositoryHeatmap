@@ -609,8 +609,8 @@ func findLatestJSONFile(outputDir string) (string, error) {
 func main() {
 	// グローバルフラグの設定
 	globalFlags := pflag.NewFlagSet("global", pflag.ExitOnError)
-	globalFlags.BoolVarP(&showVersion, "version", "v", false, "バージョン情報を表示")
-	globalFlags.BoolVarP(&showHelp, "help", "h", false, "ヘルプを表示")
+	globalFlags.BoolVarP(&showVersion, "version", "v", false, "display version information")
+	globalFlags.BoolVarP(&showHelp, "help", "h", false, "display help information")
 
 	// グローバルフラグを解析（先頭の引数だけを見る）
 	if len(os.Args) > 1 {

@@ -67,30 +67,30 @@ func (a *RepositoryAnalyzer) Open() error {
 	// 指定されたパスが存在することを確認
 	absPath, err := filepath.Abs(a.repoPath)
 	if err != nil {
-		return fmt.Errorf("パスの解決に失敗しました: %w", err)
+		return fmt.Errorf("failed to resolve path: %w", err)
 	}
 
 	// パスが存在し、ディレクトリであることを確認
 	info, err := os.Stat(absPath)
 	if err != nil {
-		return fmt.Errorf("パスが存在しません: %w", err)
+		return fmt.Errorf("path does not exist: %w", err)
 	}
 
 	if !info.IsDir() {
-		return fmt.Errorf("指定されたパスはディレクトリではありません: %s", absPath)
+		return fmt.Errorf("specified path is not a directory: %s", absPath)
 	}
 
 	// .gitディレクトリの存在を確認
 	gitDirPath := filepath.Join(absPath, ".git")
 	if _, err := os.Stat(gitDirPath); err != nil {
-		return fmt.Errorf("指定されたディレクトリはGitリポジトリではありません（.gitディレクトリが見つかりません）: %s", absPath)
+		return fmt.Errorf("specified directory is not a Git repository (no .git directory found): %s", absPath)
 	}
 
 	// リポジトリを開く
 	a.repoPath = absPath
 	repo, err := git.PlainOpen(a.repoPath)
 	if err != nil {
-		return fmt.Errorf("リポジトリを開けませんでした: %w", err)
+		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
 	a.repo = repo
@@ -112,7 +112,7 @@ func (a *RepositoryAnalyzer) Clone(url string) error {
 		Progress: nil,
 	})
 	if err != nil {
-		return fmt.Errorf("リポジトリをクローンできませんでした: %w", err)
+		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 	a.repo = repo
 
@@ -125,14 +125,14 @@ func (a *RepositoryAnalyzer) Clone(url string) error {
 func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 	// リポジトリが開かれていることを確認
 	if a.repo == nil {
-		return nil, fmt.Errorf("リポジトリが開かれていません")
+		return nil, fmt.Errorf("repository is not opened")
 	}
 
 	// 統計情報を初期化
 	if a.stats == nil {
 		a.stats = &models.RepositoryStats{
 			Files:          make(map[string]models.FileChangeInfo),
-			RepositoryPath: a.repoPath, // リポジトリパスを設定
+			RepositoryPath: a.repoPath, // Set repository path
 			RepositoryName: filepath.Base(a.repoPath),
 		}
 	} else {
@@ -149,7 +149,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 		Order: git.LogOrderCommitterTime,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("コミット履歴の取得に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to get commit history: %w", err)
 	}
 
 	// 全コミットを配列に格納
@@ -175,7 +175,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("コミット履歴の解析に失敗しました: %w", err)
+		return nil, fmt.Errorf("failed to parse commit history: %w", err)
 	}
 
 	// 著者の統計情報を保持するマップ
@@ -183,7 +183,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 
 	// 並列処理を行う場合（デフォルトはシングルスレッド）
 	if a.workerCount > 1 {
-		fmt.Printf("並列コミット処理を開始します（ワーカー数: %d）\n", a.workerCount)
+		fmt.Printf("Starting parallel commit processing (workers: %d)\n", a.workerCount)
 
 		// WaitGroupを使ってゴルーチンの終了を待機
 		var wg sync.WaitGroup
@@ -228,7 +228,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 					stats, err := c.Stats()
 					a.mutex.Unlock()
 					if err != nil {
-						fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+						fmt.Printf("Error analyzing commit %s: %v\n", c.Hash.String(), err)
 						continue
 					}
 
@@ -336,7 +336,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 			stats, err := c.Stats()
 			if err != nil {
 				// エラー処理
-				fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+				fmt.Printf("Error analyzing commit %s: %v\n", c.Hash.String(), err)
 				continue
 			}
 
@@ -380,7 +380,7 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 								}
 							} else if isBinary {
 								// バイナリファイルはスキップ
-								fmt.Printf("バイナリファイル '%s' はスキップします\n", filePath)
+								fmt.Printf("Skipping binary file '%s'\n", filePath)
 							}
 						}
 					}
@@ -453,7 +453,7 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 		stats, err := c.Stats()
 		if err != nil {
 			// エラー処理
-			fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
+			fmt.Printf("Error analyzing commit %s: %v\n", c.Hash.String(), err)
 			a.mutex.Unlock()
 			continue
 		}
@@ -498,7 +498,7 @@ func (a *RepositoryAnalyzer) processCommits(commits []*object.Commit, authors ma
 							}
 						} else if isBinary {
 							// バイナリファイルはスキップ
-							fmt.Printf("バイナリファイル '%s' はスキップします\n", filePath)
+							fmt.Printf("Skipping binary file '%s'\n", filePath)
 						}
 					}
 				}
