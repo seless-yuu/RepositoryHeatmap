@@ -29,7 +29,7 @@ func (g *Generator) Generate() error {
 	// Generate JSON data
 	err := g.generateJSONData()
 	if err != nil {
-		return fmt.Errorf("Failed to generate JSON data: %w", err)
+		return fmt.Errorf("failed to generate JSON data: %w", err)
 	}
 
 	return nil
@@ -43,7 +43,7 @@ func (g *Generator) generateJSONData() error {
 	// Create file
 	file, err := os.Create(jsonPath)
 	if err != nil {
-		return fmt.Errorf("Failed to create JSON file: %w", err)
+		return fmt.Errorf("failed to create JSON file: %w", err)
 	}
 	defer file.Close()
 
@@ -73,7 +73,7 @@ func (g *Generator) generateJSONData() error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(g.stats); err != nil {
-		return fmt.Errorf("Failed to encode JSON: %w", err)
+		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
 
 	fmt.Printf("Heatmap data saved to JSON: %s\n", jsonPath)

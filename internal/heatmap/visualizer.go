@@ -69,22 +69,22 @@ func (v *Visualizer) SetMaxFilesToShow(maxFiles int) {
 func (v *Visualizer) Visualize() error {
 	// Check if the output directory exists
 	if err := utils.EnsureDirectoryExists(v.outputDir); err != nil {
-		return fmt.Errorf("Failed to create output directory: %w", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Generate heatmap based on the output type
 	if v.outputType == "svg" || v.outputType == "webp" {
 		// Generate repository-wide heatmap
 		if err := v.generateRepositoryHeatmap(); err != nil {
-			return fmt.Errorf("Failed to generate repository heatmap: %w", err)
+			return fmt.Errorf("failed to generate repository heatmap: %w", err)
 		}
 
 		// Generate file-wide heatmaps
 		if err := v.generateFileHeatmaps(); err != nil {
-			return fmt.Errorf("Failed to generate file heatmaps: %w", err)
+			return fmt.Errorf("failed to generate file heatmaps: %w", err)
 		}
 	} else {
-		return fmt.Errorf("Unsupported output format: %s", v.outputType)
+		return fmt.Errorf("unsupported output format: %s", v.outputType)
 	}
 
 	fmt.Printf("Visualization completed\n")
@@ -138,12 +138,12 @@ func min(x, y int) int {
 func (v *Visualizer) generateRepositoryHeatmap() error {
 	// Verify repository name
 	if v.stats.RepositoryName == "" {
-		return fmt.Errorf("Repository name not set")
+		return fmt.Errorf("repository name not set")
 	}
 
 	// Check and create output directory
 	if err := utils.EnsureDirectoryExists(v.outputDir); err != nil {
-		return fmt.Errorf("Failed to create output directory: %w", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Determine output file path
@@ -153,7 +153,7 @@ func (v *Visualizer) generateRepositoryHeatmap() error {
 	// Create directory for file heatmaps
 	fileHeatmapDir := filepath.Join(v.outputDir, "file-heatmaps")
 	if err := utils.EnsureDirectoryExists(fileHeatmapDir); err != nil {
-		return fmt.Errorf("Failed to create file heatmap directory: %w", err)
+		return fmt.Errorf("failed to create file heatmap directory: %w", err)
 	}
 
 	// Generate heatmap based on output type
@@ -181,7 +181,7 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	// Create file
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("Failed to create SVG file: %w", err)
+		return fmt.Errorf("failed to create SVG file: %w", err)
 	}
 	defer file.Close()
 
@@ -489,7 +489,7 @@ func (v *Visualizer) generateWebPRepositoryHeatmap(outputPath string) error {
 	// Create dummy file
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("Failed to create WebP file: %w", err)
+		return fmt.Errorf("failed to create WebP file: %w", err)
 	}
 	file.Close()
 
@@ -502,7 +502,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 	// Check output directory
 	fileHeatmapDir := filepath.Join(v.outputDir, "file-heatmaps")
 	if err := utils.EnsureDirectoryExists(fileHeatmapDir); err != nil {
-		return fmt.Errorf("Failed to create file heatmap directory: %w", err)
+		return fmt.Errorf("failed to create file heatmap directory: %w", err)
 	}
 
 	// Sort files by change frequency
@@ -529,7 +529,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 		// Check if parent directory exists
 		parentDir := filepath.Dir(outputPath)
 		if err := utils.EnsureDirectoryExists(parentDir); err != nil {
-			return fmt.Errorf("Failed to create directory: %s: %w", parentDir, err)
+			return fmt.Errorf("failed to create directory: %s: %w", parentDir, err)
 		}
 
 		// Get color based on file change frequency
@@ -546,7 +546,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 
 		// If error occurs, abort processing
 		if err != nil {
-			return fmt.Errorf("Failed to generate heatmap for file '%s': %w", filePath, err)
+			return fmt.Errorf("failed to generate heatmap for file '%s': %w", filePath, err)
 		}
 	}
 
@@ -614,13 +614,13 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	// Check and create output directory
 	outputDir := filepath.Dir(outputPath)
 	if err := utils.EnsureDirectoryExists(outputDir); err != nil {
-		return fmt.Errorf("Failed to create output directory: %s: %w", outputDir, err)
+		return fmt.Errorf("failed to create output directory: %s: %w", outputDir, err)
 	}
 
 	// Create file
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("Failed to create SVG file: %w", err)
+		return fmt.Errorf("failed to create SVG file: %w", err)
 	}
 	defer file.Close()
 
@@ -748,7 +748,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 func (v *Visualizer) generateWebPFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
 	// Check and create treemap directory
 	if err := utils.EnsureDirectoryExists(filepath.Dir(outputPath)); err != nil {
-		return fmt.Errorf("Failed to create treemap directory: %s: %w", filepath.Dir(outputPath), err)
+		return fmt.Errorf("failed to create treemap directory: %s: %w", filepath.Dir(outputPath), err)
 	}
 
 	// TODO: Actual WebP generation processing
@@ -757,7 +757,7 @@ func (v *Visualizer) generateWebPFileHeatmap(outputPath, filePath string, fileIn
 	// Create dummy file
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("Failed to create WebP file: %w", err)
+		return fmt.Errorf("failed to create WebP file: %w", err)
 	}
 	file.Close()
 
