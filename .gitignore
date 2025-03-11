@@ -34,3 +34,5 @@ repository-heatmap-debug.log
 
 # テスト出力ディレクトリ
 test-results/
+
+.DS_Store
