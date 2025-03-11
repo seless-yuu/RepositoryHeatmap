@@ -72,23 +72,18 @@ func (v *Visualizer) Visualize() error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Generate heatmap based on the output type
-	if v.outputType == "svg" || v.outputType == "webp" {
-		// Generate repository-wide heatmap
-		if err := v.generateRepositoryHeatmap(); err != nil {
-			return fmt.Errorf("failed to generate repository heatmap: %w", err)
-		}
+	// Generate repository heatmap
+	if err := v.generateRepositoryHeatmap(); err != nil {
+		return fmt.Errorf("failed to generate repository heatmap: %w", err)
+	}
 
-		// Generate file-wide heatmaps
-		if err := v.generateFileHeatmaps(); err != nil {
-			return fmt.Errorf("failed to generate file heatmaps: %w", err)
-		}
-	} else {
-		return fmt.Errorf("unsupported output format: %s", v.outputType)
+	// Generate file heatmaps
+	if err := v.generateFileHeatmaps(); err != nil {
+		return fmt.Errorf("failed to generate file heatmaps: %w", err)
 	}
 
 	fmt.Printf("Visualization completed\n")
-	fmt.Printf("Results saved in %s heatmap directory\n", v.outputDir)
+	fmt.Printf("Results saved in %s directory\n", v.outputDir)
 
 	return nil
 }
