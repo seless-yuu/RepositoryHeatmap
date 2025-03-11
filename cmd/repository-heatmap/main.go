@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -602,7 +603,7 @@ func findLatestJSONFile(outputDir string) (string, error) {
 				errorMsg += fmt.Sprintf("- %s\n", err)
 			}
 		}
-		return "", fmt.Errorf(errorMsg)
+		return "", errors.New(errorMsg)
 	}
 
 	return latestFile, nil
