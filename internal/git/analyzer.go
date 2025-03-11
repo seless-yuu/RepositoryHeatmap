@@ -223,7 +223,10 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 					localAuthors[authorName] = authorStat
 
 					// ファイルの変更状況を解析
+					// go-gitの操作を同期化
+					a.mutex.Lock()
 					stats, err := c.Stats()
+					a.mutex.Unlock()
 					if err != nil {
 						fmt.Printf("コミット %s の解析エラー: %v\n", c.Hash.String(), err)
 						continue
@@ -250,23 +253,24 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 							}
 						}
 
-						// 変更回数をカウント
+						// ファイル情報を更新
 						fileInfo.ChangeCount++
-						fileInfo.LastModified = c.Author.When
 						fileInfo.Authors[authorName]++
+						if c.Author.When.After(fileInfo.LastModified) {
+							fileInfo.LastModified = c.Author.When
+						}
 
-						// コミットメッセージを蓄積（最大5つまで）
-						if len(fileInfo.CommitMessages) < 5 {
-							if !containsString(fileInfo.CommitMessages, c.Message) {
-								fileInfo.CommitMessages = append(fileInfo.CommitMessages, c.Message)
-							}
+						// コミットメッセージを追加（最大5件まで）
+						msg := c.Message
+						if len(fileInfo.CommitMessages) < 5 && !containsString(fileInfo.CommitMessages, msg) {
+							fileInfo.CommitMessages = append(fileInfo.CommitMessages, msg)
 						}
 
 						localFiles[filePath] = fileInfo
 					}
 				}
 
-				// ローカルデータをグローバルに集約（一度だけロック）
+				// グローバルマップへの更新をミューテックスで保護
 				a.mutex.Lock()
 
 				// 著者情報をマージ
@@ -284,30 +288,27 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 				for path, fileInfo := range localFiles {
 					globalFileInfo, exists := a.stats.Files[path]
 					if exists {
-						// 既存のファイル情報をマージ
+						// 既存のファイル情報を更新
 						globalFileInfo.ChangeCount += fileInfo.ChangeCount
 						if fileInfo.LastModified.After(globalFileInfo.LastModified) {
 							globalFileInfo.LastModified = fileInfo.LastModified
 						}
-
 						// 著者情報をマージ
 						for author, count := range fileInfo.Authors {
 							globalFileInfo.Authors[author] += count
 						}
-
-						// コミットメッセージをマージ
+						// コミットメッセージをマージ（最大5件まで）
 						for _, msg := range fileInfo.CommitMessages {
 							if len(globalFileInfo.CommitMessages) < 5 && !containsString(globalFileInfo.CommitMessages, msg) {
 								globalFileInfo.CommitMessages = append(globalFileInfo.CommitMessages, msg)
 							}
 						}
+						a.stats.Files[path] = globalFileInfo
 					} else {
 						// 新しいファイル
-						globalFileInfo = fileInfo
+						a.stats.Files[path] = fileInfo
 						a.stats.FileCount++
 					}
-
-					a.stats.Files[path] = globalFileInfo
 				}
 
 				a.mutex.Unlock()

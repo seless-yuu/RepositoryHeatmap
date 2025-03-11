@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -229,16 +230,12 @@ func analyzeCommand(args []string) {
 		logDebug("Analyzing commits only after specified date: %s", parsedTime.Format("2006-01-02"))
 	}
 
-	// 並列ワーカー数の設定
-	if workers < 0 {
-		logDebug("Error: Worker count must be 0 or greater")
-		os.Exit(1)
-	} else if workers == 0 {
-		workers = utils.GetNumCPUs()
-		logDebug("Setting worker count based on available CPU cores: %d", workers)
-	} else {
-		logDebug("Worker count: %d", workers)
+	// ワーカー数を設定（CPUコア数の半分を使用）
+	workerCount := runtime.NumCPU() / 2
+	if workerCount < 1 {
+		workerCount = 1
 	}
+	fmt.Printf("Setting worker count based on available CPU cores: %d\n", workerCount)
 
 	// 出力ディレクトリ作成
 	if err := utils.EnsureDirectoryExists(outputDir); err != nil {
@@ -263,8 +260,8 @@ func analyzeCommand(args []string) {
 		os.Exit(1)
 	}
 
-	// 並列ワーカー数を設定
-	analyzer.SetWorkerCount(workers)
+	// ワーカー数を設定
+	analyzer.SetWorkerCount(workerCount)
 
 	// 日付フィルタを設定
 	if since != nil {
@@ -318,7 +315,7 @@ func analyzeCommand(args []string) {
 	// 行単位での変更追跡
 	logDebug("Tracking line-level changes...")
 	lineTracker := git.NewLineTracker(analyzer)
-	lineTracker.SetWorkerCount(workers) // 行変更追跡も並列化
+	lineTracker.SetWorkerCount(workerCount) // 行変更追跡も並列化
 	if err := lineTracker.TrackLineChanges(stats); err != nil {
 		logDebug("Failed to track line-level changes: %v", err)
 		os.Exit(1)
