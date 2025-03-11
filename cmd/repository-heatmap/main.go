@@ -33,12 +33,6 @@ var (
 	inputFile   string
 	filePattern string
 	fileType    string
-
-	// Analyze command flags
-	analyzeFlags *pflag.FlagSet
-
-	// Visualize command flags
-	visualizeFlags *pflag.FlagSet
 )
 
 // analyzeコマンド用のフラグ設定
