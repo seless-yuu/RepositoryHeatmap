@@ -27,7 +27,7 @@ var (
 	sinceDate   string
 	workers     int
 	maxFiles    int
-	version     = "0.1.0" // Application version
+	version     = "1.0.0" // Application version
 	logFile     *os.File
 	logger      *log.Logger
 	inputFile   string
