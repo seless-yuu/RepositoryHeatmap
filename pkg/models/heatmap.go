@@ -2,47 +2,47 @@ package models
 
 import "time"
 
-// FileChangeInfo はファイルの変更情報を表す構造体
+// FileChangeInfo is a struct representing file change information
 type FileChangeInfo struct {
-	FilePath       string         `json:"file_path"`       // ファイルパス
-	ChangeCount    int            `json:"change_count"`    // 変更回数
-	LastModified   time.Time      `json:"last_modified"`   // 最終変更日時
-	Authors        map[string]int `json:"authors"`         // 著者別の変更回数
-	LineChanges    map[int]int    `json:"line_changes"`    // 行番号ごとの変更回数
-	LineContents   map[int]string `json:"line_contents"`   // 行番号ごとのテキスト内容
-	CommitMessages []string       `json:"commit_messages"` // 関連するコミットメッセージ
-	FileType       string         `json:"file_type"`       // ファイルタイプ（拡張子など）
-	HeatLevel      float64        `json:"heat_level"`      // 相対的な変更頻度レベル (0.0-1.0)
+	FilePath       string         `json:"file_path"`       // File path
+	ChangeCount    int            `json:"change_count"`    // Change count
+	LastModified   time.Time      `json:"last_modified"`   // Last modified date
+	Authors        map[string]int `json:"authors"`         // Change count by author
+	LineChanges    map[int]int    `json:"line_changes"`    // Change count by line number
+	LineContents   map[int]string `json:"line_contents"`   // Text content by line number
+	CommitMessages []string       `json:"commit_messages"` // Related commit messages
+	FileType       string         `json:"file_type"`       // File type (extension, etc.)
+	HeatLevel      float64        `json:"heat_level"`      // Relative change frequency level (0.0-1.0)
 }
 
-// CommitInfo はコミット情報を表す構造体
+// CommitInfo is a struct representing commit information
 type CommitInfo struct {
-	Hash      string    `json:"hash"`      // コミットハッシュ
-	Author    string    `json:"author"`    // 著者名
-	Email     string    `json:"email"`     // 著者のメールアドレス
-	Message   string    `json:"message"`   // コミットメッセージ
-	Timestamp time.Time `json:"timestamp"` // コミット日時
-	Files     []string  `json:"files"`     // 変更されたファイル一覧
+	Hash      string    `json:"hash"`      // Commit hash
+	Author    string    `json:"author"`    // Author name
+	Email     string    `json:"email"`     // Author's email address
+	Message   string    `json:"message"`   // Commit message
+	Timestamp time.Time `json:"timestamp"` // Commit datetime
+	Files     []string  `json:"files"`     // List of changed files
 }
 
-// RepositoryStats はリポジトリ全体の統計情報を表す構造体
+// RepositoryStats is a struct representing repository-wide statistics
 type RepositoryStats struct {
-	RepositoryName string                    `json:"repository_name"` // リポジトリ名
-	RepositoryPath string                    `json:"repository_path"` // リポジトリの絶対パス
-	AnalyzedAt     time.Time                 `json:"analyzed_at"`     // 解析実行日時
-	CommitCount    int                       `json:"commit_count"`    // 総コミット数
-	AuthorCount    int                       `json:"author_count"`    // 著者数
-	FileCount      int                       `json:"file_count"`      // ファイル数
-	Files          map[string]FileChangeInfo `json:"files"`           // ファイルごとの変更情報
-	TopAuthors     []AuthorStat              `json:"top_authors"`     // 上位貢献者
-	TopFiles       []string                  `json:"top_files"`       // 最も変更頻度の高いファイル
-	FirstCommitAt  time.Time                 `json:"first_commit_at"` // 最初のコミット日時
-	LastCommitAt   time.Time                 `json:"last_commit_at"`  // 最後のコミット日時
+	RepositoryName string                    `json:"repository_name"` // Repository name
+	RepositoryPath string                    `json:"repository_path"` // Repository absolute path
+	AnalyzedAt     time.Time                 `json:"analyzed_at"`     // Analysis execution datetime
+	CommitCount    int                       `json:"commit_count"`    // Total commit count
+	AuthorCount    int                       `json:"author_count"`    // Author count
+	FileCount      int                       `json:"file_count"`      // File count
+	Files          map[string]FileChangeInfo `json:"files"`           // Change information by file
+	TopAuthors     []AuthorStat              `json:"top_authors"`     // Top contributors
+	TopFiles       []string                  `json:"top_files"`       // Most frequently changed files
+	FirstCommitAt  time.Time                 `json:"first_commit_at"` // First commit datetime
+	LastCommitAt   time.Time                 `json:"last_commit_at"`  // Last commit datetime
 }
 
-// AuthorStat は著者の貢献統計を表す構造体
+// AuthorStat is a struct representing author contribution statistics
 type AuthorStat struct {
-	Name         string `json:"name"`          // 著者名
-	CommitCount  int    `json:"commit_count"`  // コミット数
-	FilesChanged int    `json:"files_changed"` // 変更したファイル数
+	Name         string `json:"name"`          // Author name
+	CommitCount  int    `json:"commit_count"`  // Commit count
+	FilesChanged int    `json:"files_changed"` // Number of files changed
 }

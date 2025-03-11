@@ -6,11 +6,11 @@ import (
 )
 
 func main() {
-	fmt.Println("これはテスト出力です")
-	fmt.Fprintf(os.Stdout, "標準出力へのテスト\n")
-	fmt.Fprintf(os.Stderr, "標準エラー出力へのテスト\n")
+	fmt.Println("This is a test output")
+	fmt.Fprintf(os.Stdout, "Test to standard output\n")
+	fmt.Fprintf(os.Stderr, "Test to standard error output\n")
 
-	// 手動フラッシュを試みる（通常は不要）
+	// Try manual flush (normally not needed)
 	os.Stdout.Sync()
 	os.Stderr.Sync()
 }

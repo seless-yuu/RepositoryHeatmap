@@ -33,6 +33,12 @@ var (
 	inputFile   string
 	filePattern string
 	fileType    string
+
+	// Analyze command flags
+	analyzeFlags *pflag.FlagSet
+
+	// Visualize command flags
+	visualizeFlags *pflag.FlagSet
 )
 
 // analyzeコマンド用のフラグ設定
@@ -59,7 +65,7 @@ func setupVisualizeFlags(visualizeCmd *pflag.FlagSet) {
 	visualizeCmd.BoolVarP(&showHelp, "help", "h", false, "Show help")
 }
 
-// analyzeコマンドのヘルプメッセージ
+// Show help message for analyze command
 func showAnalyzeHelp(analyzeCmd *pflag.FlagSet) {
 	fmt.Println("Repository Heatmap - Repository Analysis Command")
 	fmt.Println("=========================================================")
@@ -103,7 +109,7 @@ func showAnalyzeHelp(analyzeCmd *pflag.FlagSet) {
 	fmt.Printf("  %s analyze -r ./myrepo -t js -o ./results\n", os.Args[0])
 }
 
-// visualizeコマンドのヘルプメッセージ
+// Show help message for visualize command
 func showVisualizeHelp(visualizeCmd *pflag.FlagSet) {
 	fmt.Println("Repository Heatmap - Heatmap Visualization Command")
 	fmt.Println("=========================================================")
@@ -592,12 +598,12 @@ func findLatestJSONFile(outputDir string) (string, error) {
 	}
 
 	if latestFile == "" {
-		errorMsg := "JSONファイルが見つかりませんでした。\n検索したディレクトリ:\n"
+		errorMsg := "JSON file not found.\nSearched directories:\n"
 		for _, dir := range searchDirs {
 			errorMsg += fmt.Sprintf("- %s\n", dir)
 		}
 		if len(searchErrors) > 0 {
-			errorMsg += "\n検索中のエラー:\n"
+			errorMsg += "\nErrors during search:\n"
 			for _, err := range searchErrors {
 				errorMsg += fmt.Sprintf("- %s\n", err)
 			}
@@ -642,7 +648,7 @@ func main() {
 	case "visualize":
 		visualizeCommand(os.Args[2:])
 	default:
-		fmt.Printf("エラー: 不明なコマンド '%s'\n", os.Args[1])
+		fmt.Printf("Error: Unknown command '%s'\n", os.Args[1])
 		showMainHelp()
 		os.Exit(1)
 	}
