@@ -3,6 +3,7 @@
 import (
 	"bufio"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"strings"
@@ -411,12 +412,16 @@ func (v *Visualizer) renderTreeMap(file *os.File, node *TreeNode) {
 	if !node.IsDir {
 		// ファイル名をサニタイズ
 		safeFileName := utils.SanitizePath(node.Path)
+
+		// デバッグ情報を表示
+		fmt.Printf("リンク生成: %s -> %s\n", node.Path, safeFileName)
+
 		// リンク先はfile-heatmapsディレクトリ内のファイル
 		// 常に相対パスで指定（リポジトリヒートマップSVGからの相対パス）
 		linkPath := fmt.Sprintf("./file-heatmaps/%s.%s", safeFileName, v.outputType)
 
-		// リンクタグを開始
-		fmt.Fprintf(file, `  <a href="%s" target="_blank">`, linkPath)
+		// リンクタグを開始（エスケープ処理を追加）
+		fmt.Fprintf(file, `  <a href="%s" target="_blank">`, html.EscapeString(linkPath))
 	}
 
 	// ノード名が表示できる十分なスペースがある場合のみ表示（幅 > 40px および 高さ > 14px）
@@ -500,12 +505,8 @@ func (v *Visualizer) generateFileHeatmaps() error {
 		// ファイルパスを安全な形式に変換
 		safeFileName := utils.SanitizePath(filePath)
 
-		// HTMLのリンクではスラッシュを使用する必要があるため、
-		// 格納する実際のファイルシステムパスに変換
-		fsPath := filepath.FromSlash(safeFileName)
-
 		// 出力ファイルパスを作成
-		outputPath := filepath.Join(fileHeatmapDir, fsPath+"."+v.outputType)
+		outputPath := filepath.Join(fileHeatmapDir, safeFileName+"."+v.outputType)
 
 		// 親ディレクトリが存在することを確認
 		parentDir := filepath.Dir(outputPath)
@@ -589,6 +590,15 @@ func escapeSpecialChars(text string) string {
 
 // generateSVGFileHeatmap はSVG形式のファイルヒートマップを生成する
 func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInfo models.FileChangeInfo, color string) error {
+	// デバッグ情報
+	fmt.Printf("SVGファイルヒートマップを生成: %s -> %s\n", filePath, outputPath)
+
+	// 出力ディレクトリの作成を確認
+	outputDir := filepath.Dir(outputPath)
+	if err := utils.EnsureDirectoryExists(outputDir); err != nil {
+		return fmt.Errorf("出力ディレクトリの作成に失敗しました: %s: %w", outputDir, err)
+	}
+
 	// ファイルを作成
 	file, err := os.Create(outputPath)
 	if err != nil {
@@ -596,12 +606,12 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 	}
 	defer file.Close()
 
-	// ファイル冁Eの取征E
+	// ファイル内容の取得
 	var fileContent []string
 
-	// JSONに行E容が保存されてぁE場合Eそれを使用
+	// JSONに行内容が保存されている場合はそれを使用
 	if len(fileInfo.LineContents) > 0 {
-		// 最大の行番号を取征E
+		// 最大の行番号を取得
 		maxLine := 0
 		for lineNum := range fileInfo.LineContents {
 			if lineNum > maxLine {
@@ -609,7 +619,7 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 			}
 		}
 
-		// LineContentsから行E容を取征E
+		// LineContentsから行内容を取得
 		fileContent = make([]string, maxLine)
 		for i := range fileContent {
 			lineNum := i + 1
@@ -618,14 +628,14 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 			}
 		}
 
-		fmt.Printf("JSONから '%s' の冁Eを読み込みました (%d衁E\n", filePath, maxLine)
+		fmt.Printf("JSONから '%s' の内容を読み込みました (%d行)\n", filePath, maxLine)
 	} else {
-		// JSONに行E容がなぁE合E、リポジトリからファイル冁Eを読み込むE後方互換性EE
+		// JSONに行内容がない場合、リポジトリからファイル内容を読み込む（後方互換性）
 		var readErr error
 		fileContent, readErr = v.readFileContent(filePath)
 		if readErr != nil {
 			// エラーの場合は空の内容で続行
-			fileContent = []string{"ファイルの内容を読み込めませんでした"}
+			fileContent = []string{"// ファイルの内容を読み込めませんでした"}
 			fmt.Printf("警告: '%s' の内容を読み込めませんでした: %v\n", filePath, readErr)
 		}
 	}
@@ -640,18 +650,21 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
 		maxWidth     = 1200
 	)
 
-	// コード行数に基づぁE��キャンバスの高さを決宁E
+	// コード行数に基づいてキャンバスの高さを決定
 	contentHeight := len(fileContent) * lineHeight
 	canvasHeight := contentHeight + marginTop + marginBottom
 	if canvasHeight < 400 {
 		canvasHeight = 400 // 最小高さ
 	}
 
-	// ヒートマップに表示するタイトルEファイルパスEE
+	// ヒートマップに表示するタイトル（ファイルパス）
 	title := filePath
 	if len(title) > 80 {
 		title = "..." + title[len(title)-77:]
 	}
+
+	// HTMLエスケープ処理
+	escapedTitle := html.EscapeString(title)
 
 	// SVGヘッダーを書き込む
 	fmt.Fprintf(file, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -666,29 +679,32 @@ func (v *Visualizer) generateSVGFileHeatmap(outputPath, filePath string, fileInf
     <!-- 行番号とコード-->
 `,
 		maxWidth, canvasHeight,
-		title, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
+		escapedTitle, fileInfo.ChangeCount, fileInfo.LastModified.Format("2006/01/02"),
 		marginLeft, marginTop)
 
-	// 吁Eコードを描画
+	// 各行のコードを描画
 	for i, line := range fileContent {
-		// 行番号を計箁E
+		// 行番号を計算
 		lineNum := i + 1
 
-		// こE行のヒートレベルEデフォルトE0EE
+		// この行のヒートレベル（デフォルトは0）
 		heatLevel := 0
 		if level, exists := fileInfo.LineChanges[lineNum]; exists {
 			heatLevel = level
 		}
 
-		// 色を取征E
-		lineColor := "#ffffff" // チォルトE白
+		// 色を取得
+		lineColor := "#ffffff" // デフォルトは白
 		if heatLevel > 0 {
-			// ヒートレベルめE.0-1.0の篁Eに変換
+			// ヒートレベルを0.0-1.0の範囲に変換
 			normalizedHeat := float64(heatLevel) / 10.0
+			if normalizedHeat > 1.0 {
+				normalizedHeat = 1.0
+			}
 			lineColor = GetHeatColor(normalizedHeat)
 		}
 
-		// チエードをエスケーチE
+		// テキストをエスケープ
 		escapedText := escapeSpecialChars(line)
 
 		// 行を描画

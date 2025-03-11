@@ -37,56 +37,83 @@ func IsLocalRepository(repoPath string) bool {
 
 // SanitizePath はファイルパスを安全なファイル名形式に変換する
 func SanitizePath(path string) string {
-	// 移動やコピーを示す特殊なパスを処理（例: 'old => new'）
-	if strings.Contains(path, "=>") {
-		parts := strings.Split(path, "=>")
-		if len(parts) > 1 {
-			// 最新のパスを使用（通常は右側）
-			path = strings.TrimSpace(parts[len(parts)-1])
+	// NULLパスのチェック
+	if path == "" {
+		return "unknown_file"
+	}
+
+	// パス区切り文字を '/' に正規化
+	normalizedPath := filepath.ToSlash(path)
+
+	// 安全に処理するために、ディレクトリとファイル名を分ける
+	dir, fileName := filepath.Split(normalizedPath)
+
+	// ファイル名を単純化（最初に特定の特殊ファイルを確認）
+	isSpecialFile := false
+
+	// READMEファイルの特別処理
+	if strings.HasPrefix(strings.ToLower(fileName), "readme") {
+		isSpecialFile = true
+	}
+
+	// Pythonファイルの特別処理
+	if strings.HasSuffix(strings.ToLower(fileName), ".py") && strings.Contains(fileName, "_") {
+		isSpecialFile = true
+	}
+
+	// 特別処理が必要なファイル名
+	var safeFileName string
+
+	if isSpecialFile {
+		// 特別なファイルはアンダースコアと拡張子を保持
+		// ただし、ファイルシステムやURLで問題になりうる文字だけを置換
+		safeFileName = replaceUnsafeChars(fileName)
+	} else {
+		// 一般的なファイル名の処理
+		ext := filepath.Ext(fileName)
+		fileNameWithoutExt := strings.TrimSuffix(fileName, ext)
+
+		// ファイル名だけアルファベット、数字、ハイフン、アンダースコアに制限
+		safeBase := replaceUnsafeChars(fileNameWithoutExt)
+
+		// 拡張子があれば保持（先頭の「.」を含む）
+		if ext != "" {
+			// 拡張子の始めのドットは維持し、残りの部分を処理
+			safeExt := "." + replaceUnsafeChars(ext[1:])
+			safeFileName = safeBase + safeExt
+		} else {
+			safeFileName = safeBase
 		}
 	}
 
-	// ディレクトリ部分と名前部分を取得
-	dir := filepath.Dir(path)
-	filename := filepath.Base(path)
+	// ディレクトリパスを安全に変換（ディレクトリ構造を維持）
+	var safeDirPath string
+	if dir != "" {
+		// パスセパレータ（/）で分割
+		dirParts := strings.Split(strings.Trim(dir, "/"), "/")
+		safeDirParts := make([]string, len(dirParts))
 
-	// ディレクトリパスを安全な形式に変換
-	if dir != "" && dir != "." {
-		// 非アルファベット数字記号を安全な形式に変換
-		dir = regexp.MustCompile(`[^a-zA-Z0-9/\\]`).ReplaceAllString(dir, "_")
+		for i, part := range dirParts {
+			// 各ディレクトリ名を安全に変換
+			safeDirParts[i] = replaceUnsafeChars(part)
+		}
 
-		// WindowsとUnixのパス区切り文字を統一
-		// SVGファイルの参照のために、常に '/' を使用する
-		dir = strings.ReplaceAll(dir, "\\", "/")
-	} else {
-		dir = "."
+		// パスを再構築
+		safeDirPath = strings.Join(safeDirParts, "/")
+		if safeDirPath != "" {
+			safeDirPath += "/"
+		}
 	}
 
-	// ファイル名から拡張子を分離
-	ext := filepath.Ext(filename)
-	filenameWithoutExt := strings.TrimSuffix(filename, ext)
+	// 最終的なパスを構築
+	return safeDirPath + safeFileName
+}
 
-	// ファイル名部分を安全な文字列に変換
-	// ファイルシステムで問題となる文字を置換
-	safeFilename := regexp.MustCompile(`[^a-zA-Z0-9-_]`).ReplaceAllString(filenameWithoutExt, "_")
-
-	// 拡張子も安全な形式に変換
-	safeExt := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(ext, "_")
-
-	// 安全なファイル名を生成
-	safeFilename = safeFilename + safeExt
-
-	// 空のファイル名は避ける
-	if safeFilename == "" {
-		safeFilename = "unknown_file"
-	}
-
-	// 新しいパスを作成
-	if dir == "." {
-		return safeFilename
-	}
-	// パス区切り文字として常に '/' を使用
-	return dir + "/" + safeFilename
+// replaceUnsafeChars は安全でない文字を置き換える
+func replaceUnsafeChars(s string) string {
+	// URLやファイルシステム上で問題になる特殊文字のみを置換
+	// アンダースコア、ハイフン、ドットは保持
+	return regexp.MustCompile(`[^a-zA-Z0-9_\-.]`).ReplaceAllString(s, "_")
 }
 
 // GetFileExtension はファイルの拡張子を取得する
