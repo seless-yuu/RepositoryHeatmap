@@ -6,6 +6,7 @@ import (
 	"html"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/repositoryheatmap/internal/utils"
@@ -108,6 +109,23 @@ func GetHeatColor(heatLevel float64) string {
 	}
 }
 
+// sortFilesByHeat returns a list of files sorted by heat level
+func sortFilesByHeat(stats *models.RepositoryStats) []models.FileChangeInfo {
+	files := make([]models.FileChangeInfo, 0, len(stats.Files))
+
+	// Convert map to array
+	for _, fileInfo := range stats.Files {
+		files = append(files, fileInfo)
+	}
+
+	// Sort by change count (descending)
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].ChangeCount > files[j].ChangeCount
+	})
+
+	return files
+}
+
 // min returns the smaller of x or y
 func min(x, y int) int {
 	if x < y {
@@ -182,7 +200,7 @@ func (v *Visualizer) generateSVGRepositoryHeatmap(outputPath string) error {
 	treeMapHeight := canvasHeight - marginTop - marginBottom
 
 	// Sort files by change frequency and limit display count
-	files := getSortedFilesByHeat(v.stats)
+	files := sortFilesByHeat(v.stats)
 	if v.maxFilesToShow > 0 {
 		if v.maxFilesToShow < len(files) {
 			files = files[:v.maxFilesToShow]
@@ -488,7 +506,7 @@ func (v *Visualizer) generateFileHeatmaps() error {
 	}
 
 	// Sort files by change frequency
-	files := getSortedFilesByHeat(v.stats)
+	files := sortFilesByHeat(v.stats)
 
 	// Check maxFilesToShow value
 	maxFiles := v.maxFilesToShow
