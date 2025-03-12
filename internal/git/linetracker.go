@@ -2,10 +2,13 @@ package git
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/repositoryheatmap/pkg/models"
 )
@@ -121,6 +124,45 @@ func (lt *LineTracker) TrackLineChanges(stats *models.RepositoryStats) error {
 	return nil
 }
 
+var chunkHeaderRegex = regexp.MustCompile(`^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
+
+func parseChunkHeader(header string) (oldStart, oldCount, newStart, newCount int, err error) {
+	matches := chunkHeaderRegex.FindStringSubmatch(header)
+	if matches == nil {
+		return 0, 0, 0, 0, fmt.Errorf("invalid chunk header format: %s", header)
+	}
+
+	oldStart, err = strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("invalid old start line: %s", matches[1])
+	}
+
+	if matches[2] != "" {
+		oldCount, err = strconv.Atoi(matches[2])
+		if err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("invalid old count: %s", matches[2])
+		}
+	} else {
+		oldCount = 1
+	}
+
+	newStart, err = strconv.Atoi(matches[3])
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("invalid new start line: %s", matches[3])
+	}
+
+	if matches[4] != "" {
+		newCount, err = strconv.Atoi(matches[4])
+		if err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("invalid new count: %s", matches[4])
+		}
+	} else {
+		newCount = 1
+	}
+
+	return oldStart, oldCount, newStart, newCount, nil
+}
+
 // processCommitPair は2つのコミット間の差分を処理する
 func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *models.RepositoryStats) {
 	// 2つのツリー間の差分を取得
@@ -157,18 +199,46 @@ func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *mo
 		}
 
 		// 各チャンクの変更を処理
+		oldLine, newLine := 0, 0
 		for _, chunk := range filePatch.Chunks() {
-			// go-git の diff.Chunk は Lines() メソッドがないので、Content() を使用して行を処理
-			content := chunk.Content()
-			lines := splitLines(content)
-			startLine := 1 // 簡易的な実装では行番号は推測
+			// チャンクヘッダーを解析
+			if chunk.Type() == diff.Equal {
+				// 変更されていない行はスキップ
+				lines := strings.Split(chunk.Content(), "\n")
+				if len(lines) > 0 && lines[len(lines)-1] == "" {
+					lines = lines[:len(lines)-1]
+				}
+				oldLine += len(lines)
+				newLine += len(lines)
+				continue
+			}
 
-			// 各行に変更をカウント
-			for i := range lines {
-				// 簡略化：各行を処理（実際の実装ではより正確な行番号と変更の追跡が必要）
-				lineNumber := startLine + i
-				// 行の変更回数を増やす
-				fileInfo.LineChanges[lineNumber]++
+			// チャンクの内容を行に分割
+			lines := strings.Split(chunk.Content(), "\n")
+			if len(lines) > 0 && lines[len(lines)-1] == "" {
+				lines = lines[:len(lines)-1] // 最後の空行を除外
+			}
+
+			// チャンクのタイプに基づいて処理
+			switch chunk.Type() {
+			case diff.Add:
+				// 追加された行を処理
+				for _, line := range lines {
+					if line == "" {
+						continue
+					}
+					newLine++
+					fileInfo.LineChanges[newLine]++
+				}
+			case diff.Delete:
+				// 削除された行を処理
+				for _, line := range lines {
+					if line == "" {
+						continue
+					}
+					oldLine++
+					fileInfo.LineChanges[oldLine]++
+				}
 			}
 		}
 
