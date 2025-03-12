@@ -3,7 +3,6 @@ package git
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -75,37 +74,34 @@ func (lt *LineTracker) TrackLineChanges(stats *models.RepositoryStats) error {
 	}
 
 	// 2. マルチスレッド処理でコミットペアを解析
-	if lt.workerCount > 1 && len(commitList) > 2 {
+	if lt.workerCount > 1 && len(commitList) > 1 {
 		// ワーカー数を調整（コミット数より多く設定しないように）
 		workerCount := lt.workerCount
 		if workerCount > len(commitList)-1 {
 			workerCount = len(commitList) - 1
 		}
 
-		// コミットペアをワーカー数に応じて分割
-		pairs := len(commitList) - 1 // 連続するコミットのペア数
-		chunkSize := (pairs + workerCount - 1) / workerCount
-		var wg sync.WaitGroup
+		// コミットペアをワーカー数で分割
+		pairCount := len(commitList) - 1
+		pairsPerWorker := pairCount / workerCount
+		if pairsPerWorker < 1 {
+			pairsPerWorker = 1
+		}
 
-		// 各ワーカーが担当するコミットペア範囲を処理
+		// ワーカーを起動
+		var wg sync.WaitGroup
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
-
-			// 各ワーカーの処理範囲を計算
-			startIdx := i * chunkSize
-			endIdx := (i + 1) * chunkSize
-			if endIdx > pairs {
-				endIdx = pairs
+			startIdx := i * pairsPerWorker
+			endIdx := (i + 1) * pairsPerWorker
+			if i == workerCount-1 {
+				endIdx = pairCount
 			}
 
-			// ゴルーチンでコミットペア解析を実行
-			go func(startIndex, endIndex int) {
+			go func(start, end int) {
 				defer wg.Done()
-				// 各ペアを処理
-				for j := startIndex; j < endIndex; j++ {
-					current := commitList[j]
-					next := commitList[j+1]
-					lt.processCommitPair(current, next, stats)
+				for j := start; j < end; j++ {
+					lt.processCommitPair(commitList[j], commitList[j+1], stats)
 				}
 			}(startIdx, endIdx)
 		}
@@ -113,55 +109,16 @@ func (lt *LineTracker) TrackLineChanges(stats *models.RepositoryStats) error {
 		// すべてのワーカーの完了を待機
 		wg.Wait()
 	} else {
-		// シングルスレッドで処理
+		// シングルスレッド処理
 		for i := 0; i < len(commitList)-1; i++ {
-			current := commitList[i]
-			next := commitList[i+1]
-			lt.processCommitPair(current, next, stats)
+			lt.processCommitPair(commitList[i], commitList[i+1], stats)
 		}
 	}
 
 	return nil
 }
 
-var chunkHeaderRegex = regexp.MustCompile(`^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
-
-func parseChunkHeader(header string) (oldStart, oldCount, newStart, newCount int, err error) {
-	matches := chunkHeaderRegex.FindStringSubmatch(header)
-	if matches == nil {
-		return 0, 0, 0, 0, fmt.Errorf("invalid chunk header format: %s", header)
-	}
-
-	oldStart, err = strconv.Atoi(matches[1])
-	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("invalid old start line: %s", matches[1])
-	}
-
-	if matches[2] != "" {
-		oldCount, err = strconv.Atoi(matches[2])
-		if err != nil {
-			return 0, 0, 0, 0, fmt.Errorf("invalid old count: %s", matches[2])
-		}
-	} else {
-		oldCount = 1
-	}
-
-	newStart, err = strconv.Atoi(matches[3])
-	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("invalid new start line: %s", matches[3])
-	}
-
-	if matches[4] != "" {
-		newCount, err = strconv.Atoi(matches[4])
-		if err != nil {
-			return 0, 0, 0, 0, fmt.Errorf("invalid new count: %s", matches[4])
-		}
-	} else {
-		newCount = 1
-	}
-
-	return oldStart, oldCount, newStart, newCount, nil
-}
+var chunkHeaderRegex = regexp.MustCompile(`@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
 
 // processCommitPair は2つのコミット間の差分を処理する
 func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *models.RepositoryStats) {
@@ -199,20 +156,8 @@ func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *mo
 		}
 
 		// 各チャンクの変更を処理
-		oldLine, newLine := 0, 0
+		currentLine := 1
 		for _, chunk := range filePatch.Chunks() {
-			// チャンクヘッダーを解析
-			if chunk.Type() == diff.Equal {
-				// 変更されていない行はスキップ
-				lines := strings.Split(chunk.Content(), "\n")
-				if len(lines) > 0 && lines[len(lines)-1] == "" {
-					lines = lines[:len(lines)-1]
-				}
-				oldLine += len(lines)
-				newLine += len(lines)
-				continue
-			}
-
 			// チャンクの内容を行に分割
 			lines := strings.Split(chunk.Content(), "\n")
 			if len(lines) > 0 && lines[len(lines)-1] == "" {
@@ -227,8 +172,8 @@ func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *mo
 					if line == "" {
 						continue
 					}
-					newLine++
-					fileInfo.LineChanges[newLine]++
+					fileInfo.LineChanges[currentLine]++
+					currentLine++
 				}
 			case diff.Delete:
 				// 削除された行を処理
@@ -236,8 +181,13 @@ func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *mo
 					if line == "" {
 						continue
 					}
-					oldLine++
-					fileInfo.LineChanges[oldLine]++
+					fileInfo.LineChanges[currentLine]++
+					currentLine++
+				}
+			default:
+				// 変更されていない行を処理
+				for range lines {
+					currentLine++
 				}
 			}
 		}
@@ -248,12 +198,6 @@ func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *mo
 		// ロックを解放
 		lt.mutex.Unlock()
 	}
-}
-
-// splitLines は文字列を行に分割する
-func splitLines(content string) []string {
-	// 簡易的な行分割（実際の実装ではより複雑な処理が必要な場合がある）
-	return strings.Split(content, "\n")
 }
 
 // CalculateLineHeatLevels は各ファイルの行ごとのヒートレベルを計算する
