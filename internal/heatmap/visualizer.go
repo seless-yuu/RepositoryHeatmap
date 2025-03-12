@@ -1,7 +1,6 @@
 package heatmap
 
 import (
-	"bufio"
 	"fmt"
 	"html"
 	"os"
@@ -152,14 +151,6 @@ func parseJSONPath(jsonPath string) (string, string, error) {
 	}
 
 	return dir, base, nil
-}
-
-// min returns the smaller of x or y
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
 }
 
 // generateRepositoryHeatmap generates the repository-wide heatmap
@@ -594,34 +585,8 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 		return lines, nil
 	}
 
-	// 2. If repository path is set, check if it's actually existing
-	if v.stats.RepositoryPath != "" {
-		fullPath := filepath.Join(v.stats.RepositoryPath, filePath)
-		// Check if path actually exists
-		if _, err := os.Stat(fullPath); err == nil {
-			return v.readFile(fullPath)
-		}
-		// If file is not found, return error message
-		return []string{fmt.Sprintf("// File %s not found (%s)", filePath, fullPath)}, nil
-	}
-
 	// 3. If repository path is not set, return error message
-	return []string{"// Repository path is not set, so cannot read file content"}, nil
-}
-
-func (v *Visualizer) readFile(fullPath string) ([]string, error) {
-	file, err := os.Open(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return lines, scanner.Err()
+	return []string{"// Line contents not available in JSON data. Please run analyze command with the latest code."}, nil
 }
 
 // escapeSpecialChars escapes special characters in SVG

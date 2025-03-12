@@ -266,6 +266,29 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 							fileInfo.CommitMessages = append(fileInfo.CommitMessages, msg)
 						}
 
+						// ファイル内容読み込み処理を追加
+						a.mutex.Lock() // ファイル読み込みもロック
+						fileObj, err := c.File(filePath)
+						if err == nil {
+							// バイナリファイルは処理しない
+							isBinary, err := fileObj.IsBinary()
+							if err == nil && !isBinary {
+								// ファイル内容を読み込む
+								content, err := fileObj.Contents()
+								if err == nil {
+									lines := strings.Split(content, "\n")
+									for i, line := range lines {
+										lineNumber := i + 1
+										fileInfo.LineContents[lineNumber] = line
+									}
+								}
+							} else if isBinary {
+								// バイナリファイルはスキップ
+								fmt.Printf("Skipping binary file '%s'\n", filePath)
+							}
+						}
+						a.mutex.Unlock()
+
 						localFiles[filePath] = fileInfo
 					}
 				}
@@ -361,27 +384,25 @@ func (a *RepositoryAnalyzer) Analyze() (*models.RepositoryStats, error) {
 					}
 					a.stats.FileCount++
 
-					// 最新コミットの場合、ファイルの内容を読み込んで保存
-					if c == commitList[0] {
-						// ファイルオブジェクトを取得
-						fileObj, err := c.File(filePath)
-						if err == nil {
-							// バイナリファイルは処理しない
-							isBinary, err := fileObj.IsBinary()
-							if err == nil && !isBinary {
-								// ファイル内容を読み込む
-								content, err := fileObj.Contents()
-								if err == nil {
-									lines := strings.Split(content, "\n")
-									for i, line := range lines {
-										lineNumber := i + 1
-										fileInfo.LineContents[lineNumber] = line
-									}
+					// ファイル内容読み込み - 最新コミットの条件を削除
+					// ファイルオブジェクトを取得
+					fileObj, err := c.File(filePath)
+					if err == nil {
+						// バイナリファイルは処理しない
+						isBinary, err := fileObj.IsBinary()
+						if err == nil && !isBinary {
+							// ファイル内容を読み込む
+							content, err := fileObj.Contents()
+							if err == nil {
+								lines := strings.Split(content, "\n")
+								for i, line := range lines {
+									lineNumber := i + 1
+									fileInfo.LineContents[lineNumber] = line
 								}
-							} else if isBinary {
-								// バイナリファイルはスキップ
-								fmt.Printf("Skipping binary file '%s'\n", filePath)
 							}
+						} else if isBinary {
+							// バイナリファイルはスキップ
+							fmt.Printf("Skipping binary file '%s'\n", filePath)
 						}
 					}
 				}
