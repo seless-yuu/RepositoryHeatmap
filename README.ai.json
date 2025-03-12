@@ -1,7 +1,7 @@
 {
   "tool_name": "repository-heatmap",
   "description": "A tool for analyzing and visualizing Git repository change frequencies",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "commands": {
     "analyze": {
       "description": "Analyze Git repository commit history and generate heatmap data",
