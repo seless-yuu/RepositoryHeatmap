@@ -2,7 +2,6 @@ package git
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -117,8 +116,6 @@ func (lt *LineTracker) TrackLineChanges(stats *models.RepositoryStats) error {
 
 	return nil
 }
-
-var chunkHeaderRegex = regexp.MustCompile(`@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
 
 // processCommitPair processes the diff between two commits
 func (lt *LineTracker) processCommitPair(current, next *object.Commit, stats *models.RepositoryStats) {
