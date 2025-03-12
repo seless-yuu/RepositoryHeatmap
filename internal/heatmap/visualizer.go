@@ -595,7 +595,7 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 	}
 
 	// 3. If repository path is not set, return error message
-	return []string{"// Repository path is not set, so cannot read file content"}, nil
+	return []string{"// Line contents not available in JSON data. Please run analyze command with the latest code."}, nil
 }
 
 func (v *Visualizer) readFile(fullPath string) ([]string, error) {
