@@ -594,17 +594,6 @@ func (v *Visualizer) readFileContent(filePath string) ([]string, error) {
 		return lines, nil
 	}
 
-	// 2. If repository path is set, check if it's actually existing
-	if v.stats.RepositoryPath != "" {
-		fullPath := filepath.Join(v.stats.RepositoryPath, filePath)
-		// Check if path actually exists
-		if _, err := os.Stat(fullPath); err == nil {
-			return v.readFile(fullPath)
-		}
-		// If file is not found, return error message
-		return []string{fmt.Sprintf("// File %s not found (%s)", filePath, fullPath)}, nil
-	}
-
 	// 3. If repository path is not set, return error message
 	return []string{"// Repository path is not set, so cannot read file content"}, nil
 }
